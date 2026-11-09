@@ -81,7 +81,7 @@ describe('cosmology', () => {
   });
 
   it('scale samples a(t) evenly over [0, tEnd] and grows', () => {
-    const c = makeCosmology(DEFAULTS.H0, DEFAULTS.omegaLambda, DEFAULTS.tEndGyr);
+    const c = makeCosmology(DEFAULTS.H0, DEFAULTS.omegaLambda, 200);
     expect(c.scale.length).toBe(SCALE_SAMPLES);
     expect(c.scale[0]).toBe(0);
     const i = 300;
