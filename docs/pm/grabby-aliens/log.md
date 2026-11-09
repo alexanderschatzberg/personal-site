@@ -1,10 +1,13 @@
 # pm log: grabby aliens simulation
 
 Branch: `pm/grabby-aliens` · Plan: `plan.md` · Started: 2026-11-09
-State: round 3 implementing (mobile)
+State: awaiting merge OK
 
 ## For the user
 
+- 2026-11-09 **unfixed (minor)**: The phone sheet tabs have no matching tabpanel role, so screen-reader semantics are incomplete. The heavy-run note and the info card can overlap at the top in portrait.
+- 2026-11-09 **review**: A phone [apply] writes galaxies=2000 into the URL, so a link shared from a phone opens a 2000-galaxy run on desktop too.
+- 2026-11-09 **review**: Civilization names are zero-based (civ-00, civ-01, …).
 - 2026-11-09 **review**: A shared link replays exactly in the same browser engine. Across browsers (Safari vs Chrome), tiny floating-point differences in Math.exp/log could in principle change a run. Making that bulletproof would need hand-written maths functions; probably not worth it.
 - 2026-11-09 **check**: Nobody has seen the page in a browser yet. The agents have no browser, so the WebGL rendering, globe and cube rotation, overlays, phone layout and theme repaint are unverified. Open `npm run dev` → /projects/grabby-aliens/.
 - 2026-11-09 **review**: These choices were made by the page agent: the drawer opens by default at widths ≥900px; the 2d/3d and geometry buttons rerun the simulation straight away; the globe and cube spin slowly until you drag them (not with reduced motion); speeds are 1×/4×/16×; ←/→ steps 1% of the run.
@@ -43,3 +46,4 @@ State: round 3 implementing (mobile)
   - Minor: the frontier info card counts the neighbourhood on every frame.
   All three go to fix round 1.
 - 2026-11-09 Phase 5 fix round 1: 3 commits (584a620, eab6073, 28627ba), 114 tests. Re-review: findings 1 and 3 closed. Finding 2 moved: clamping a(t) to 3e38 freezes growth and shows the wrong a and scale bar past t≈595 Gyr at H0=150/ΩΛ=0.99/tEnd=1000. New minor: hidden border layer accumulates updateRanges without bound. Both are cheap, so fix round 2. Contract change by the PM: SimResult.scale is now Float64Array (a max ≈ e^153 within RANGES, finite as a double).
+- 2026-11-09 Phase 5 fix round 2: 1c5ad90 (scale Float64, no clamp, formatA) and fda9101 (UploadTracker caps pending ranges at 64, then switches to a full upload). The PM read the small fix diff directly, skipping a third reviewer agent to save tokens, and found no new issues. Note: a seek that changes more than 64 separate ranges now does a full colour upload, which is cheap. Gate: 118/118 tests, build OK.
