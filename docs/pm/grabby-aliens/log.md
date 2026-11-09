@@ -42,3 +42,4 @@ State: round 3 implementing (mobile)
   - Minor: Float32 scale overflows to Infinity at H0 ≥ ~105 with tEnd 1000, giving a NaN group scale.
   - Minor: the frontier info card counts the neighbourhood on every frame.
   All three go to fix round 1.
+- 2026-11-09 Phase 5 fix round 1: 3 commits (584a620, eab6073, 28627ba), 114 tests. Re-review: findings 1 and 3 closed. Finding 2 moved: clamping a(t) to 3e38 freezes growth and shows the wrong a and scale bar past t≈595 Gyr at H0=150/ΩΛ=0.99/tEnd=1000. New minor: hidden border layer accumulates updateRanges without bound. Both are cheap, so fix round 2. Contract change by the PM: SimResult.scale is now Float64Array (a max ≈ e^153 within RANGES, finite as a double).

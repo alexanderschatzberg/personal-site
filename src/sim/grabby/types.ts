@@ -154,7 +154,7 @@ export interface SimResult {
   /** Scale factor a(t) at SCALE_SAMPLES evenly spaced times from 0 to params.tEndGyr inclusive
    *  (sample i is at t = i * tEndGyr / (SCALE_SAMPLES - 1)). All 1 when H0 = 0. Physical
    *  position at time t = positions × a(t). Interpolate linearly between samples. */
-  scale: Float32Array;
+  scale: Float64Array;
   /** The symmetrised kNN neighbour graph the fronts travel along, as index pairs (i, j) with
    *  i < j, each pair once: edges[2k], edges[2k+1]. The view draws borders on edges whose two
    *  ends have different owners. */
