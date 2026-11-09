@@ -230,3 +230,13 @@ The user wants the simulation to end once no more galaxies can be reached.
   - At the end, playback stops, and the readout shows `ended · no more galaxies reachable` (or `ended · lifetime reached` when tLast = tEnd).
   - The lifetime field stays as an upper cap.
   - The 1× playback speed is based on the span to tLast.
+
+## Round 2b: the life window
+
+U3 found that with expansion on, the defaults never spread. Origins drawn from ∝ t^6 on [0, 200 Gyr] land after 100 Gyr, when a(t) is too large for any front to reach a neighbour. The user chose a separate **life window**. The contract gained `lifeWindowGyr` (default 20, range [1, 1000]).
+
+**U5 (one agent, engine and view):**
+- Engine: t0 = min(lifeWindowGyr, tEndGyr) · u^(1/(hardSteps+1)).
+- The H0 = 0 snapshot fixture (criterion 14) was generated with an implicit window of tEnd. Its cases must pass `lifeWindowGyr` equal to their tEndGyr explicitly, so the fixture stays valid unchanged. Don't regenerate the fixture.
+- View: add a "life window (Gyr)" field next to hard steps. The fields/RANGES coverage test must include it, and so must the URL round-trip.
+- Add a test: with the defaults (expansion on), at least one civ conquers or colonizes at least one galaxy other than its origin on most of the 6 seeds. Report the measured counts per seed: civs, colonize events, tLast.

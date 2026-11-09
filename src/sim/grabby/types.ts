@@ -22,8 +22,10 @@ export interface Params {
   planetsPerGalaxy: number;
   /** Chance that a single planet produces a grabby civilization at some point. */
   pLife: number;
-  /** Hard-steps exponent n: origin time is drawn with density ∝ t^n on [0, tEndGyr]. */
+  /** Hard-steps exponent n: origin time is drawn with density ∝ t^n on [0, min(lifeWindowGyr, tEndGyr)]. */
   hardSteps: number;
+  /** Life window: civilizations can only arise before this time, in Gyr after the big bang. */
+  lifeWindowGyr: number;
   /** Expansion speed range, as a fraction of c. Each civ draws uniformly from it. */
   speedMin: number;
   speedMax: number;
@@ -67,6 +69,7 @@ export const DEFAULTS: Params = {
   planetsPerGalaxy: 1e11,
   pLife: 1e-22,
   hardSteps: 6,
+  lifeWindowGyr: 20,
   speedMin: 0.3,
   speedMax: 0.9,
   temperMean: 0.5,
@@ -90,6 +93,7 @@ export const RANGES = {
   planetsPerGalaxy: [1e9, 1e13],
   pLife: [1e-30, 1e-10],
   hardSteps: [0, 12],
+  lifeWindowGyr: [1, 1000],
   speedMin: [0.01, 0.99],
   speedMax: [0.01, 0.99],
   temperMean: [0, 1],
