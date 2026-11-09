@@ -120,6 +120,7 @@ img { max-width: 100%; display: block; }
   object-fit: cover;
   border-bottom: 1px solid var(--rule);
 }
+.project-card img.fit-contain { object-fit: contain; padding: 15% 20%; background: var(--code); }
 .project-card-text { padding: 14px 16px 18px; display: flex; flex-direction: column; gap: 4px; }
 .project-card h2 { margin: 0; font-size: 14px; font-weight: 500; }
 /* Makes the whole card clickable when it has a link */

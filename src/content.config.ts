@@ -23,6 +23,8 @@ const projects = defineCollection({
     // Path to an image in public/, e.g. "/images/projects/my-project.jpg"
     image: z.string().optional(),
     imageAlt: z.string().optional(),
+    // "cover" fills the card (screenshots); "contain" fits it with padding (logos).
+    imageFit: z.enum(['cover', 'contain']).default('cover'),
     // External link (repo, live site). If the file has body text, it also gets its own page.
     url: z.string().optional(),
     // Name of a three.js demo in src/demos/ (without .ts). Gives the project its own page.

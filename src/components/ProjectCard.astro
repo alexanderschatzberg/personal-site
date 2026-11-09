@@ -4,12 +4,12 @@ import { projectHref } from '../lib';
 
 interface Props { project: CollectionEntry<'projects'> }
 const { project } = Astro.props;
-const { title, description, image, imageAlt } = project.data;
+const { title, description, image, imageAlt, imageFit } = project.data;
 const href = projectHref(project);
 ---
 <article class="project-card">
   {image
-    ? <img src={image} alt={imageAlt ?? ''} loading="lazy" />
+    ? <img class={`fit-${imageFit}`} src={image} alt={imageAlt ?? ''} loading="lazy" />
     : <div class="image-placeholder" aria-hidden="true">[image]</div>}
   <div class="project-card-text">
     <h2>{href ? <a href={href}>{title}</a> : title}</h2>
