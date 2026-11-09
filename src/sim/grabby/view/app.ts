@@ -6,7 +6,7 @@ import type { WorkerRequest, WorkerResponse } from '../worker';
 import { FIELDS, fromInput, toInput } from './fields';
 import { advance, nextSpeed, SPEEDS, step } from './playback';
 import { Renderer } from './renderer';
-import { clampNum, MAX_SEED_LENGTH, paramsToQuery, queryToParams } from './url';
+import { clampNum, clipSeed, paramsToQuery, queryToParams } from './url';
 
 export function mount(root: HTMLElement) {
   const $ = <T extends Element = HTMLElement>(sel: string) => root.querySelector(sel) as T;
@@ -241,7 +241,7 @@ export function mount(root: HTMLElement) {
       next[f.key] = v !== null ? clampNum(f.key, v) : params[f.key];
     }
     next.mightModel = input('mightModel').value as Params['mightModel'];
-    const seed = input('seed').value.trim().slice(0, MAX_SEED_LENGTH);
+    const seed = clipSeed(input('seed').value);
     next.seed = seed || params.seed;
     return next;
   }
