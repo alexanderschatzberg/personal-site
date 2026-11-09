@@ -57,3 +57,11 @@ State: round 4 implementing (user feedback)
   - clicks pick owned regions only
   - an advanced drawer and tooltips
   Contract updated. U7 (engine) and U8 (view) run in parallel.
+- 2026-11-09 Round 4: U8 view done (6 commits, 94 view tests). Tests changed to follow the round 4 spec:
+  - growth: "1+ln a" became "d = min(a, 1)".
+  - end texts updated.
+  - The lifetime-label test became "tEndGyr never shown".
+  - The space/life/war/cosmos tabs test became a basic/advanced test.
+  The PM checked each change against criteria 28, 32 and 33: they track the spec and none of them weakens a check.
+  - UI constants: DEPTH_PX 4, donut 2(R+r) = size, initial tilt -0.9 rad, fit margin 1.3.
+  - Known limitation: a front-facing point hidden by the other side of the tube at grazing angles can still be picked.
