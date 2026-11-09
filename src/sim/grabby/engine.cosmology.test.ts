@@ -237,3 +237,27 @@ describe('frontier performance', () => {
     }, 60000);
   }
 });
+
+describe('the life window (round 2b)', () => {
+  it('origins arise inside [0, min(lifeWindowGyr, tEndGyr)]', () => {
+    for (const [lifeWindowGyr, tEndGyr] of [[20, 200], [5, 200], [300, 100]]) {
+      const r = simulate({ H0: 0, lifeWindowGyr, tEndGyr, galaxies: 1500, pLife: 1e-20, seed: 'lw' });
+      expect(r.civs.length).toBeGreaterThan(0);
+      for (const c of r.civs) expect(c.t0).toBeLessThanOrEqual(Math.min(lifeWindowGyr, tEndGyr));
+    }
+  });
+
+  it('with the defaults (expansion on), civs spread beyond their origin on most seeds', () => {
+    const report: Record<string, { civs: number; colonize: number; conquer: number; tLast: number }> = {};
+    let spread = 0;
+    for (const seed of SEEDS) {
+      const r = simulate({ seed });
+      const colonize = r.events.filter((e) => e.kind === 'colonize').length;
+      const conquer = r.events.filter((e) => e.kind === 'conquer').length;
+      report[seed] = { civs: r.civs.length, colonize, conquer, tLast: r.tLast };
+      if (colonize + conquer > 0) spread++;
+    }
+    console.log('life window, defaults (civs, colonize, conquer, tLast):', JSON.stringify(report));
+    expect(spread).toBeGreaterThanOrEqual(4);
+  });
+});

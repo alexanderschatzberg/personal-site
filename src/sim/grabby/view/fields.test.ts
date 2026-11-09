@@ -15,6 +15,13 @@ describe('drawer fields', () => {
     expect(`${f.label} (${f.unit})`).toBe('lifetime (Gyr)');
   });
 
+  it('labels the origin window as the life window, next to hard steps', () => {
+    const i = FIELDS.findIndex((x) => x.key === 'lifeWindowGyr');
+    const f = FIELDS[i];
+    expect(`${f.label} (${f.unit})`).toBe('life window (Gyr)');
+    expect(FIELDS[i - 1].key).toBe('hardSteps');
+  });
+
   it('reads every value from a number box, never a step-snapping slider', () => {
     // A range input sanitises its value to its step (93.5 → 94), which used to leak into
     // the params and the URL. The value-holding control must be a number input.

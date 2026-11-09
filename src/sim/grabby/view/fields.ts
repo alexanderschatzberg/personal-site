@@ -24,6 +24,7 @@ export const FIELDS: NumField[] = [
   { key: 'pLife', label: 'p(life) / planet', input: 'number' },
   { key: 'planetsPerGalaxy', label: 'planets / galaxy', input: 'number' },
   { key: 'hardSteps', label: 'hard steps', input: 'number' },
+  { key: 'lifeWindowGyr', label: 'life window', unit: 'Gyr', input: 'number', note: 'civilizations can only arise before this' },
   { key: 'speedMin', label: 'speed min', unit: 'c', input: 'number' },
   { key: 'speedMax', label: 'speed max', unit: 'c', input: 'number' },
   { key: 'temperMean', label: 'temperament', input: 'number', slider: 0.01, note: '0 peaceful · 1 aggressive' },

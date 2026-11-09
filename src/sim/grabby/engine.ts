@@ -149,10 +149,12 @@ export function simulate(input: Partial<Params>): SimResult {
 
   // 6. Origin candidates.
   const q = 1 - Math.exp((-p.pLife * p.planetsPerGalaxy * REAL_GALAXIES) / n);
+  // Life can only arise inside the life window (density ∝ t^hardSteps on [0, tWindow]).
+  const tWindow = Math.min(p.lifeWindowGyr, p.tEndGyr);
   const candidates: Candidate[] = [];
   for (let i = 0; i < n; i++) {
     if (rng() >= q) continue;
-    const t0 = p.tEndGyr * Math.pow(rng(), 1 / (p.hardSteps + 1));
+    const t0 = tWindow * Math.pow(rng(), 1 / (p.hardSteps + 1));
     const speed = p.speedMin + (p.speedMax - p.speedMin) * rng();
     const temper = clamp(normal(rng, p.temperMean, p.temperSpread), 0, 1);
     const baseMight = p.mightMin + (p.mightMax - p.mightMin) * rng();

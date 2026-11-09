@@ -30,6 +30,7 @@ describe('url', () => {
       H0: 0,
       omegaLambda: 0.7123456789,
       tEndGyr: 333.3333333333333,
+      lifeWindowGyr: 12.345678901234,
       mightModel: 'frontier',
       seed: 'hello world/&?=#',
     };
