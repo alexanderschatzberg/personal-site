@@ -38,7 +38,7 @@ describe('SimResult cosmology fields', () => {
   it('scale and tToday follow the cosmology; static when H0 = 0', () => {
     const r = simulate({});
     const c = makeCosmology(DEFAULTS.H0, DEFAULTS.omegaLambda, DEFAULTS.tEndGyr);
-    expect(r.scale).toBeInstanceOf(Float32Array);
+    expect(r.scale).toBeInstanceOf(Float64Array);
     expect(r.scale.length).toBe(SCALE_SAMPLES);
     expect(Array.from(r.scale)).toEqual(Array.from(c.scale));
     expect(r.tToday).toBe(c.tToday);

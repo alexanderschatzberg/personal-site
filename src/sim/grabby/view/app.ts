@@ -6,7 +6,7 @@ import { DEFAULTS, RANGES, type Params, type SimResult, type Timeline } from '..
 import type { WorkerRequest, WorkerResponse } from '../worker';
 import { civName, currentMight, mightText, reuseLocalCount, temperamentWord, type LocalCountCache } from './civinfo';
 import { FIELDS, fmt, fromInput, TABS, toInput, type Tab } from './fields';
-import { displayScale, physicalPerRendered, scaleAt } from './growth';
+import { displayScale, formatA, physicalPerRendered, scaleAt } from './growth';
 import { advance, endStatus, nextSpeed, span, SPEEDS, step } from './playback';
 import { LANDSCAPE_MQ, PORTRAIT_MQ, type Layout } from './layout';
 import { civColor } from './palette';
@@ -141,7 +141,7 @@ export function mount(root: HTMLElement) {
     if (!result) return;
     a = scaleAt(result.scale, result.params.tEndGyr, t);
     s = displayScale(a, result.params.H0);
-    out.a.textContent = `a = ${a > 0 && a < 0.01 ? a.toPrecision(2) : a.toFixed(2)}`;
+    out.a.textContent = `a = ${formatA(a)}`;
     renderer.setScale(s);
     scaleBar();
   }

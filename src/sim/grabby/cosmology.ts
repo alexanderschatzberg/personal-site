@@ -20,8 +20,9 @@ export interface Cosmology {
   readonly etaInf: number;
   /** Time at which a = 1, or null if outside [0, tEnd]. Static: TODAY_GYR. */
   readonly tToday: number | null;
-  /** a(t) at SCALE_SAMPLES evenly spaced times over [0, tEnd] inclusive, capped at SCALE_MAX. */
-  readonly scale: Float32Array;
+  /** a(t) at SCALE_SAMPLES evenly spaced times over [0, tEnd] inclusive. Double precision:
+   *  a(t) passes Float32's max (≈3.4e38) for some in-range params (e.g. H0 = 150, tEnd = 1000). */
+  readonly scale: Float64Array;
 }
 
 /**
@@ -32,10 +33,6 @@ export interface Cosmology {
  * inverses of one piecewise-linear map and both are monotonic.
  */
 const NODES = 1 << 16;
-
-/** Largest stored scale sample: a(t) passes Float32's max (≈3.4e38) for some in-range params
- *  (e.g. H0 = 150, tEnd = 1000), and a sample of Infinity would make interpolation NaN. */
-export const SCALE_MAX = 3e38;
 
 export function makeCosmology(H0: number, omegaLambda: number, tEnd: number): Cosmology {
   if (!(H0 > 0)) return staticCosmology(tEnd);
@@ -114,8 +111,8 @@ export function makeCosmology(H0: number, omegaLambda: number, tEnd: number): Co
     etaInf = etaEnd + sum * dt;
   }
 
-  const scale = new Float32Array(SCALE_SAMPLES);
-  for (let i = 0; i < SCALE_SAMPLES; i++) scale[i] = Math.min(SCALE_MAX, a((i * tEnd) / (SCALE_SAMPLES - 1)));
+  const scale = new Float64Array(SCALE_SAMPLES);
+  for (let i = 0; i < SCALE_SAMPLES; i++) scale[i] = a((i * tEnd) / (SCALE_SAMPLES - 1));
 
   return { isStatic: false, a, eta, etaInv, etaEnd, etaInf, tToday, scale };
 }
@@ -129,6 +126,6 @@ function staticCosmology(tEnd: number): Cosmology {
     etaEnd: tEnd,
     etaInf: Infinity,
     tToday: TODAY_GYR,
-    scale: new Float32Array(SCALE_SAMPLES).fill(1),
+    scale: new Float64Array(SCALE_SAMPLES).fill(1),
   };
 }
