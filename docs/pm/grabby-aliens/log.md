@@ -1,7 +1,7 @@
 # pm log: grabby aliens simulation
 
 Branch: `pm/grabby-aliens` · Plan: `plan.md` · Started: 2026-11-09
-State: round 2 implementing
+State: round 3 implementing (mobile)
 
 ## For the user
 
@@ -33,3 +33,6 @@ State: round 2 implementing
   Not fixed: determinism across browsers. Math.exp/log/pow can differ in the last bit between JS engines, so a shared URL could differ between Safari and Chrome. Logged as a user item.
 - 2026-11-09 Phase 2 (round 2): The user added cosmic expansion (ΛCDM, H0 + ΩΛ, lifetime = tEnd), a growing display (true size until today, log after), zoom/pan in 2D and 3D, and civ borders as outline lines (translucent patches in 3D). The contract gained H0, omegaLambda, scale, tToday and edges. Units U3 (engine) and U4 (view) are in parallel.
 - 2026-11-09 Phase 2 (round 2): U4 view done (9 commits, 33 view tests). The palette test passed against unchanged code, so it was not shipped. Its TEMP stub commit 9fd3c62 must be dropped at merge, and only after U3's engine fills edges/scale/tToday. Choices made: [no expansion] applies immediately; every param is held in a number box, and the sliders are companions only; border buffers grow by doubling instead of being preallocated.
+- 2026-11-09 Phase 3 (round 2): Merged U3 then U4 and reverted U4's TEMP stub (45024c7). Gate 80/80 tests, build OK. U3 measured tToday 13.797 Gyr and an event horizon of 16.56 Gly. U3 found the defaults never spread with expansion (origins land after 100 Gyr); the user chose a life window.
+- 2026-11-09 Round 2b: U5 added lifeWindowGyr (default 20), committed on the feature branch. 83/83 tests, build OK. Per seed with the defaults (civs/colonize/conquer/tLast): 5eed 13/722/4/149.6, a 25/1471/90/157.8, b 24/1745/226/187.5, c 17/1083/53/146.3, d 19/1515/27/163.8, e 19/1212/69/146.8.
+- 2026-11-09 Round 3: The user asked for a phone experience: a bottom sheet, lighter phone defaults, tap-for-info and landscape. U6 is a single agent on the feature branch. The final adversarial review covers rounds 2–3 together after it.

@@ -240,3 +240,59 @@ U3 found that with expansion on, the defaults never spread. Origins drawn from �
 - The H0 = 0 snapshot fixture (criterion 14) was generated with an implicit window of tEnd. Its cases must pass `lifeWindowGyr` equal to their tEndGyr explicitly, so the fixture stays valid unchanged. Don't regenerate the fixture.
 - View: add a "life window (Gyr)" field next to hard steps. The fields/RANGES coverage test must include it, and so must the URL round-trip.
 - Add a test: with the defaults (expansion on), at least one civ conquers or colonizes at least one galaxy other than its origin on most of the 6 seeds. Report the measured counts per seed: civs, colonize events, tLast.
+
+## Round 3: the phone experience (U6)
+
+The user's choices:
+- a bottom-sheet layout
+- lighter defaults on phones
+- tap a civilization for info
+- a landscape layout
+
+### Acceptance criteria (round 3)
+
+22. **Portrait phone** (coarse pointer, width ≤ 600px, portrait):
+    - The simulation fills the screen (100dvh, safe-area insets respected).
+    - The top bar shows `← grabby aliens` and `[≡]`.
+    - Under it, a compact readout: `24.8 Gyr · 31%`.
+    - The bottom has a slim time bar: `[▶]`, the scrubber and the speed. All targets are ≥ 44px.
+    - Above the time bar sits a **bottom sheet** with a grab handle. It has three snap states: collapsed (handle only), half (about 50dvh) and full (about 90dvh). It moves by dragging the handle, by tapping the handle or `[≡]`, and by keyboard (the handle is a button, with aria-expanded set).
+    - Inside the sheet:
+      - tabs `space · life · war · cosmos` that group the existing FIELDS
+      - the top-bar toggles: 2d/3d, geometry, borders, reset view, theme
+      - `[apply]` and `[reroll]` pinned at the sheet's bottom
+    - The sheet scrolls internally, and the page itself never scrolls.
+    - Dragging inside the canvas never moves the sheet, and dragging the sheet never moves the camera.
+23. **Landscape phone** (coarse pointer, height ≤ 500px, landscape): the controls move to a right side rail (about 300px, scrollable) like the desktop drawer. The time bar sits along the bottom of the canvas area, and the readout is top-left. There is no bottom sheet.
+24. **Lighter phone defaults:**
+    - On a phone (coarse pointer and min(screen w, h) ≤ 600), when the URL has no `galaxies` param, the run uses 2000 galaxies.
+    - The galaxies field caps at 15000 on phones.
+    - A URL value above the cap is honoured, and a small dismissible note appears: `heavy run · may be slow on this device`.
+    - The device pixel ratio is capped at 2 on phones.
+    - The phone-default logic is pure and tested: a function of the device flags and URL params that returns the effective params.
+25. **Tap for info:** tapping (or clicking, on desktop too) near a galaxy picks the nearest galaxy within ~24px on screen (use a raycaster Points threshold, or screen-space projection). If its galaxy is owned at the current time, a small card shows:
+    - the civ's colour swatch and name (`civ-07`)
+    - when it arose (Gyr)
+    - its speed in c
+    - its temperament (0–1) with the word peaceful, wary or aggressive (<0.33, <0.67, else)
+    - its base might
+    - its current might under the selected model (for frontier, show `base × local galaxies`, evaluated at the tapped galaxy, or `—` if too costly)
+    - the galaxies it holds now
+
+    The card updates while scrubbing and closes on `[×]` or a tap on empty space. A tap on an unowned galaxy shows `unclaimed galaxy`. The current-might maths is pure and tested.
+26. Desktop is unchanged, apart from the tap-for-info card, which also works there by click. Existing tests stay green, and `npm run build` passes.
+
+### Files
+
+U6 owns:
+- `src/pages/projects/grabby-aliens.astro`
+- `src/sim/grabby/view/**`, including new tests
+
+No engine or `types.ts` changes. If the civ info needs a field the contract lacks, compute it in the view from `SimResult.civs` and the timeline, or report.
+
+Prove it with:
+- `npm test`
+- `npm run build`
+- a dev server curl 200 on port 4332, stopped afterwards
+
+There is no browser, so list what couldn't be verified visually. Simulating a phone viewport with curl isn't possible.
