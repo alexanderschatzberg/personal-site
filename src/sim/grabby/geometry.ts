@@ -16,6 +16,8 @@ export class Space {
   readonly n: number;
   /** Sphere radius (0 unless geometry is 'sphere'). */
   readonly R: number;
+  /** Largest possible distance between two points under the metric. */
+  readonly maxDist: number;
   private readonly torus: boolean;
   private readonly sphere: boolean;
   private readonly origin: number;
@@ -37,6 +39,11 @@ export class Space {
     this.torus = geometry === 'torus';
     this.sphere = geometry === 'sphere';
     this.R = this.sphere ? size / (2 * Math.PI) : 0;
+    this.maxDist = this.sphere
+      ? Math.PI * this.R
+      : this.torus
+        ? (size / 2) * Math.sqrt(dim)
+        : size * Math.sqrt(dim);
 
     // Grid sizing: about two points per cell on average.
     const L = this.sphere ? 2 * this.R : size;
