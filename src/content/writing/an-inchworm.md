@@ -9,7 +9,7 @@ Back feet now, and the worm lunges forward upon the decaying leaf that it - thro
 
 Front, scrunch, back, extend.
 
-The worm has reached the end of the woody stem, which gently curves into the air. Ignorant, indifferent, or misperceiving to the distance between this stem and the next suitable adventure, the worm plants its hind feet on the very tip of the stem and reaches.
+The worm has reached the end of the woody stem, which gently curves into the air. Ignorant of, indifferent to, or misperceiving the distance between this stem and the next suitable adventure, the worm plants its hind feet on the very tip of the stem and reaches.
 
 For several moments, it swings there, slowly probing its body through the air in search of a place to anchor its forefeet. There proves to be no such purchase.
 

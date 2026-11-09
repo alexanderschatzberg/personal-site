@@ -3,9 +3,9 @@ title: Pain Tolerance as a Curve
 date: 2026-06-07
 ---
 
-I just ran the [Lake Tahoe Relay](https://laketahoerelay.com/course-info/) with some friends from Thacher XC. For some god awful reason and despite explicitly saying that I'd rather do any other segment, I was put on the 6th leg. The route goes from Meeks to Emerald Bay, gaining about 1200ft over 8.7 miles. I ran the first bit conservatively and picked it up on the back half for the two largest hills, on which I experienced some of the most profound running-related discomfort of my life.
+I just ran the [Lake Tahoe Relay](https://laketahoerelay.com/course-info/) with some friends from Thacher XC. For some god-awful reason and despite explicitly saying that I'd rather do any other segment, I was put on the 6th leg. The route goes from Meeks to Emerald Bay, gaining about 1,200 ft over 8.7 miles. I ran the first bit conservatively and picked it up on the back half for the two largest hills, on which I experienced some of the most profound running-related discomfort of my life.
 
-This morning, the day after the race, I went on a 20 mile trail run quite comfortably (although I did start to get some stomach cramps towards the end). It hurt, but significantly less. While showering after this run, I began to think about how I respond to different magnitudes and types of pain. Here are my thoughts:
+This morning, the day after the race, I went on a 20-mile trail run quite comfortably (although I did start to get some stomach cramps towards the end). It hurt, but significantly less. While showering after this run, I began to think about how I respond to different magnitudes and types of pain. Here are my thoughts:
 
 ## The Graph
 
