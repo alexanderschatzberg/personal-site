@@ -175,6 +175,10 @@ export function simulate(input: Partial<Params>): SimResult {
   const battles = new Set<number>();
   const pairKey = (a: number, b: number) => a * candidates.length + b;
 
+  // Frontier performance: countWithin scans every grid cell within the radius, so a radius
+  // as large as the universe makes each battle O(galaxies) (a 3d, 50k-galaxy, radius-100 run
+  // with early civs took ~190 s). When the radius reaches the largest possible distance under
+  // the metric, the count is exactly the civ's held count, so use that instead: O(1), same result.
   const frontierAll = p.frontierRadiusGly >= space.maxDist * (1 + 1e-12);
   /** Arrivals that would land after tEnd (civ, target, source). Never processed; only checked
    *  at the end to tell "lifetime reached" from "nothing more reachable". */

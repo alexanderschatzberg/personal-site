@@ -213,20 +213,27 @@ describe('the run ends when nothing more can be reached', () => {
 });
 
 describe('frontier performance', () => {
-  it('worst case (3d, 50k galaxies, 10 Gly, radius 100, pLife 1e-10) in under 10 s', () => {
-    const t0 = performance.now();
-    const r = simulate({
-      dim: 3,
-      galaxies: 50000,
-      sizeGly: 10,
-      frontierRadiusGly: 100,
-      pLife: 1e-10,
-      mightModel: 'frontier',
-    });
-    const ms = performance.now() - t0;
-    console.log(
-      `frontier worst case: ${ms.toFixed(0)} ms, ${r.civs.length} civs, ${r.events.length} events, ${r.log.length} log`,
-    );
-    expect(ms).toBeLessThan(10000);
-  }, 120000);
+  // The plan's worst case, plus hardSteps 0 so civs arise early and fight tens of thousands of
+  // battles (the plan's case on its own arises late and fights few). Without the whole-universe
+  // shortcut each frontier battle scans every galaxy, and the hardSteps 0 case takes minutes.
+  const worst = {
+    dim: 3 as const,
+    galaxies: 50000,
+    sizeGly: 10,
+    frontierRadiusGly: 100,
+    pLife: 1e-10,
+    mightModel: 'frontier' as const,
+  };
+  for (const extra of [{}, { hardSteps: 0 }, { hardSteps: 0, H0: 0 }]) {
+    it(`worst case ${JSON.stringify(extra)} in under 10 s`, () => {
+      const t0 = performance.now();
+      const r = simulate({ ...worst, ...extra });
+      const ms = performance.now() - t0;
+      console.log(
+        `frontier worst case ${JSON.stringify(extra)}: ${ms.toFixed(0)} ms, ${r.civs.length} civs, ` +
+          `${r.events.length} events, ${r.log.length} log`,
+      );
+      expect(ms).toBeLessThan(10000);
+    }, 60000);
+  }
 });
