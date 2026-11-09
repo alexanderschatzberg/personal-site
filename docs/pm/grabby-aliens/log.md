@@ -1,10 +1,11 @@
 # pm log: grabby aliens simulation
 
 Branch: `pm/grabby-aliens` · Plan: `plan.md` · Started: 2026-11-09
-State: round 4 implementing (user feedback)
+State: awaiting merge OK
 
 ## For the user
 
+- 2026-11-09 **check**: Donut picking assumes the donut points and the occluder share one transform, which is true today. If the donut drawing is ever restructured, re-check tap accuracy edge-on.
 - 2026-11-09 **review**: When the cosmic web leaves clumps no front can leave, the engine adds the fewest shortest 'bridge' links between them, so empires can cross voids. Without bridges, galaxies in an isolated clump could never be reached.
 - 2026-11-09 **review**: Cosmic web scale: real voids are ~0.1–0.3 Gly across, smaller than the ~1.5 Gly spacing between the simulated dots (each dot is ~5×10⁸ galaxies). The default web scale (12 Gly) is enlarged so the structure is visible. It is not to scale.
 - 2026-11-09 **review**: The 2D torus is drawn as a donut, but the physics still uses a flat torus: distances don't stretch on the outside of the donut the way they would on a real ring surface. The 3D torus stays a cube with wrap hints.
@@ -71,3 +72,8 @@ State: round 4 implementing (user feedback)
   - Judgement call: added Borůvka "bridges" so the kNN graph stays connected when the web splits it into clumps (about 30 islands otherwise). 50k 2d went from 165 to 837 ms.
   - Default tLast per seed is 139–188 Gyr, all below the 5000 cap. With H0 = 0 every galaxy gets settled.
   - Merged U7, then U8. The PM updated the `edges` comment in types.ts. Gate: 160/160 tests, build OK.
+- 2026-11-09 Round 4 review (138k tokens): 1 major, 2 minor.
+  - Major: donut picking ignored self-occlusion (the torus is non-convex).
+  - Minor: the planetsPerGalaxy help text was wrong.
+  - Minor: the web-scale clamp was silent.
+  Fixed in ccefe65 / ad6341c / 87bf07e. The PM read torusBlocks and the toLocal transform: it marches the SDF from the point to the camera in the donut's local space, under uniform scale. It matches a brute-force march with 0 differences. No third reviewer was spawned. Gate: 170/170 tests, build OK.
