@@ -37,3 +37,8 @@ State: round 3 implementing (mobile)
 - 2026-11-09 Round 2b: U5 added lifeWindowGyr (default 20), committed on the feature branch. 83/83 tests, build OK. Per seed with the defaults (civs/colonize/conquer/tLast): 5eed 13/722/4/149.6, a 25/1471/90/157.8, b 24/1745/226/187.5, c 17/1083/53/146.3, d 19/1515/27/163.8, e 19/1212/69/146.8.
 - 2026-11-09 Round 3: The user asked for a phone experience: a bottom sheet, lighter phone defaults, tap-for-info and landscape. U6 is a single agent on the feature branch. The final adversarial review covers rounds 2–3 together after it.
 - 2026-11-09 Round 3: U6 phone layout done (5 commits, 105 tests, build OK). PM one-liner: Base.astro adds viewport-fit=cover only for bare pages, so the safe-area CSS works on the sim page and other pages are unaffected. U6 caveats went to the final review: a phone [apply] writes galaxies=2000 to the URL; civ names are zero-based (civ-00); the tabs lack a tabpanel; the note and the info card can overlap; there may be a brief desktop-bar flash on phones before the JS runs.
+- 2026-11-09 Phase 4 (rounds 2–3 review, 145k tokens): 1 major, 2 minor.
+  - Major (verified against three r187 WebGLAttributes.js, which clears updateRanges itself after upload): renderer.ts:154/164/363 pre-clear update ranges and drop ranges from an earlier seek that haven't been uploaded yet. A pending theme full-upload followed by a partial seek uploads only the partial ranges. The result is stale dot and border colours.
+  - Minor: Float32 scale overflows to Infinity at H0 ≥ ~105 with tEnd 1000, giving a NaN group scale.
+  - Minor: the frontier info card counts the neighbourhood on every frame.
+  All three go to fix round 1.
