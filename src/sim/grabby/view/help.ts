@@ -18,7 +18,8 @@ export const HELP: Record<string, string> = {
     'Side length of the square or cube in billions of light-years (on the sphere, its circumference). The default, 93, is the diameter of the observable universe.',
   webScaleGly:
     'Typical diameter of a void, one cell of the cosmic web, in billions of light-years. Real voids are about 0.1–0.3 Gly; the default is larger so the web shows up with a few thousand points.',
-  planetsPerGalaxy: 'Planets in each simulated galaxy. Each one has the p(life) chance of producing a grabby civilization.',
+  planetsPerGalaxy:
+    'Planets in each real galaxy, each with the p(life) chance of producing a grabby civilization. Every simulated point stands for about 2 trillion ÷ galaxies real galaxies, so it holds that many times this many planets.',
   hardSteps:
     'Number of hard, unlikely steps life must pass to become grabby (Hanson et al. 2021). Origin times are drawn with density ∝ tⁿ, so more steps push civilizations later.',
   lifeWindowGyr: 'Civilizations can only arise before this time, in billions of years after the big bang.',

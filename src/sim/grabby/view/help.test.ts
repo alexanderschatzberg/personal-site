@@ -31,6 +31,11 @@ describe('help text', () => {
     expect(HELP.hardSteps).toContain('Hanson et al. 2021');
   });
 
+  it('planets per galaxy counts planets per real galaxy, as the engine does (q uses REAL_GALAXIES / n)', () => {
+    expect(HELP.planetsPerGalaxy).toMatch(/real galax/);
+    expect(HELP.planetsPerGalaxy).not.toMatch(/simulated galaxy/);
+  });
+
   it('has nothing for the hidden safety cap', () => {
     expect(HELP.tEndGyr).toBeUndefined();
   });
