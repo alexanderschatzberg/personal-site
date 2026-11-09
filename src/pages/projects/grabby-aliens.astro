@@ -1,9 +1,11 @@
 ---
 import Base from '../../layouts/Base.astro';
-import { DEFAULTS, RANGES, TODAY_GYR } from '../../sim/grabby/types';
+import { DEFAULTS, RANGES } from '../../sim/grabby/types';
 import { FIELDS, fmt, TABS, toInput } from '../../sim/grabby/view/fields';
+import { HELP } from '../../sim/grabby/view/help';
 
-const todayPct = (TODAY_GYR / DEFAULTS.tEndGyr) * 100;
+const basic = FIELDS.filter((f) => f.group === 'basic');
+const advanced = FIELDS.filter((f) => f.group === 'advanced');
 ---
 <Base title="Grabby Aliens" description="A simulation of grabby civilizations spreading through a universe of galaxies." bare>
   <div class="grabby" data-busy="true">
@@ -34,6 +36,7 @@ const todayPct = (TODAY_GYR / DEFAULTS.tEndGyr) * 100;
       <span><span class="g-claimed">0</span>% of galaxies claimed</span>
       <span><span class="g-alive">0</span> civilizations alive</span>
       <span class="g-ended"></span>
+      <span class="g-wrap" hidden>cube faces wrap: leaving one face re-enters from the opposite one</span>
       <span class="g-mini"><span class="g-mini-time">0.0</span> Gyr · <span class="g-mini-pct">0</span>%</span>
       <span class="g-status" role="status" aria-live="polite"></span>
     </div>
@@ -69,12 +72,12 @@ const todayPct = (TODAY_GYR / DEFAULTS.tEndGyr) * 100;
         <div class="g-scroll">
         <div class="g-sheet-view" role="toolbar" aria-label="View"></div>
         <span class="muted g-params-label">── params</span>
-        {FIELDS.map((f) => {
+        {basic.map((f) => {
           const [lo, hi] = RANGES[f.key];
           const id = `g-${f.key}`;
           return (
             <div class="g-field g-number" data-model={f.model} data-group={f.group}>
-              <label class="g-row" for={id}><span>{f.label}</span></label>
+              <span class="g-row g-lab"><label for={id}>{f.label}</label>{HELP[f.key] && <button class="btn g-help" type="button" data-help={f.key} aria-label={`About ${f.label}`} aria-expanded="false">[?]</button>}</span>
               <span class="g-num">
                 <input id={id} name={f.key} class="field" type="number" inputmode="decimal" min={lo} max={hi} step="any" value={toInput(DEFAULTS[f.key])} />
                 {f.unit && <span class="muted">{f.unit}</span>}
@@ -86,28 +89,52 @@ const todayPct = (TODAY_GYR / DEFAULTS.tEndGyr) * 100;
             </div>
           );
         })}
-        <div class="g-field" data-group="war">
-          <label class="g-row" for="g-mightModel"><span>might model</span>
-            <select id="g-mightModel" name="mightModel" class="field">
-              <option value="power">power: base·N^α</option>
-              <option value="log">log: base·ln(1+N)</option>
-              <option value="frontier">frontier: nearby own</option>
-            </select>
-          </label>
-        </div>
-        <div class="g-field" data-group="space">
+        <div class="g-field" data-group="basic">
           <label class="g-row" for="g-seed"><span>seed</span>
             <input id="g-seed" name="seed" class="field" type="text" maxlength="64" spellcheck="false" autocomplete="off" value={DEFAULTS.seed} />
           </label>
+        </div>
+        <button class="btn g-adv-toggle" type="button" aria-expanded="false" aria-controls="g-advanced">[+ advanced]</button>
+        <div class="g-advanced" id="g-advanced" role="group" aria-label="Advanced parameters">
+        {advanced.map((f) => {
+          const [lo, hi] = RANGES[f.key];
+          const id = `g-${f.key}`;
+          return (
+            <div class="g-field g-number" data-model={f.model} data-group={f.group}>
+              <span class="g-row g-lab"><label for={id}>{f.label}</label>{HELP[f.key] && <button class="btn g-help" type="button" data-help={f.key} aria-label={`About ${f.label}`} aria-expanded="false">[?]</button>}</span>
+              <span class="g-num">
+                <input id={id} name={f.key} class="field" type="number" inputmode="decimal" min={lo} max={hi} step="any" value={toInput(DEFAULTS[f.key])} />
+                {f.unit && <span class="muted">{f.unit}</span>}
+              </span>
+              {f.slider !== undefined && (
+                <input class="g-slider" type="range" data-slider={f.key} min={lo} max={hi} step={f.slider} value={DEFAULTS[f.key]} aria-label={`${f.label} slider`} tabindex="-1" />
+              )}
+              <span class="g-hint">range {fmt(lo)} – {fmt(hi)}{f.unit ? ` ${f.unit}` : ''}{f.note ? ` · ${f.note}` : ''}</span>
+            </div>
+          );
+        })}
+        <div class="g-field" data-group="advanced">
+          <span class="g-row g-lab"><label for="g-mightModel">might model</label><button class="btn g-help" type="button" data-help="mightModel" aria-label="About might model" aria-expanded="false">[?]</button></span>
+          <select id="g-mightModel" name="mightModel" class="field">
+            <option value="power">power: base·N^α</option>
+            <option value="log">log: base·ln(1+N)</option>
+            <option value="frontier">frontier: nearby own</option>
+          </select>
+        </div>
+        <div class="g-field g-row" data-group="advanced">
+          <button class="btn g-no-expansion" type="button">[no expansion]</button>
+          <button class="btn g-help" type="button" data-help="noExpansion" aria-label="About no expansion" aria-expanded="false">[?]</button>
+        </div>
         </div>
         </div>
         <div class="g-actions">
           <button class="btn on" type="submit">[apply]</button>
           <button class="btn g-reroll" type="button">[reroll]</button>
-          <button class="btn g-no-expansion" type="button" title="Set H0 to 0 and apply">[no expansion]</button>
         </div>
       </form>
     </aside>
+
+    <div class="g-tip" id="g-tip" role="tooltip" hidden></div>
 
     <div class="g-scale" aria-hidden="true">
       <span class="g-scalebar"><span class="g-scalebar-line"></span><span class="g-scalebar-label">–</span></span>
@@ -119,8 +146,8 @@ const todayPct = (TODAY_GYR / DEFAULTS.tEndGyr) * 100;
       <button class="btn on g-play" type="button" aria-label="Play">[▶]</button>
       <button class="btn g-speed" type="button" aria-label="Change speed">[▶▶]</button>
       <div class="g-scrub">
-        <input class="g-scrubber" type="range" min="0" max={DEFAULTS.tEndGyr} step="any" value="0" aria-label="Time in billions of years" />
-        <span class="g-today" style={`left: ${todayPct}%`} aria-hidden="true" hidden>today</span>
+        <input class="g-scrubber" type="range" min="0" max="1" step="any" value="0" aria-label="Time in billions of years" />
+        <span class="g-today" aria-hidden="true" hidden>today</span>
       </div>
       <span class="muted g-speed-label">1×</span>
     </div>
@@ -245,7 +272,20 @@ const todayPct = (TODAY_GYR / DEFAULTS.tEndGyr) * 100;
   .grabby .g-info-list > div { display: flex; justify-content: space-between; gap: 12px; }
   .grabby .g-info-list dt { color: var(--muted); }
   .grabby .g-info-list dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
-  .grabby .g-info[data-empty] .g-info-list { display: none; }
+
+  /* Basic / advanced: desktop and the rail expand a section; the portrait sheet uses tabs. */
+  .grabby .g-advanced { display: flex; flex-direction: column; gap: 14px; padding-top: 4px; border-top: 1px solid var(--rule); }
+  .grabby .g-form[data-tab='basic'] .g-advanced { display: none; }
+  .grabby .g-adv-toggle { align-self: flex-start; }
+  .grabby .g-lab { justify-content: flex-start; gap: 6px; }
+  .grabby .g-field.g-row { flex-direction: row; justify-content: flex-start; gap: 8px; }
+  .grabby .g-help { font-size: 11px; }
+  .grabby .g-tip {
+    position: fixed; z-index: 20; max-width: min(280px, calc(100vw - 16px));
+    padding: 8px 10px; background: var(--bg); color: var(--fg); border: 1px solid var(--rule);
+    font-size: 12px; line-height: 1.5; pointer-events: none;
+  }
+  .grabby .g-tip[hidden], .grabby .g-wrap[hidden] { display: none; }
 
   @media (max-width: 640px) {
     .grabby .g-top { padding: 16px; }
@@ -281,7 +321,7 @@ const todayPct = (TODAY_GYR / DEFAULTS.tEndGyr) * 100;
     .grabby .g-home-long, .grabby .g-bar > .sep { display: none; }
     .grabby .g-home-short { display: inline; }
     .grabby .g-readout { left: calc(16px + var(--sl)); right: auto; top: calc(48px + var(--st)); bottom: auto; }
-    .grabby .g-readout > span:not(.g-mini):not(.g-status):not(.g-ended) { display: none; }
+    .grabby .g-readout > span:not(.g-mini):not(.g-status):not(.g-ended):not(.g-wrap) { display: none; }
     .grabby .g-mini { display: inline; color: var(--fg); font-size: 13px; font-variant-numeric: tabular-nums; }
     .grabby .g-time-bar { gap: 8px; }
     .grabby .g-restart { display: none; }
@@ -327,10 +367,10 @@ const todayPct = (TODAY_GYR / DEFAULTS.tEndGyr) * 100;
       overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; padding: 12px 0;
     }
     .grabby .g-params-label { display: none; }
-    .grabby .g-form[data-tab='space'] .g-field:not([data-group='space']),
-    .grabby .g-form[data-tab='life'] .g-field:not([data-group='life']),
-    .grabby .g-form[data-tab='war'] .g-field:not([data-group='war']),
-    .grabby .g-form[data-tab='cosmos'] .g-field:not([data-group='cosmos']) { display: none; }
+    .grabby .g-adv-toggle { display: none; }
+    .grabby .g-advanced { display: contents; }
+    .grabby .g-form[data-tab='basic'] .g-field:not([data-group='basic']),
+    .grabby .g-form[data-tab='advanced'] .g-field:not([data-group='advanced']) { display: none; }
     .grabby .g-actions { flex: none; padding: 4px 0 calc(4px); border-top: 1px solid var(--rule); background: var(--bg); }
     .grabby .g-info {
       left: calc(16px + var(--sl)); right: calc(16px + var(--sr)); top: calc(76px + var(--st)); bottom: auto;
