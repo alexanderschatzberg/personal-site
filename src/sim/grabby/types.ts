@@ -41,15 +41,23 @@ export interface Params {
   frontierRadiusGly: number;
   /** Multiplier on the defender's might in a battle. */
   defenderBonus: number;
-  /** The simulation stops here, in Gyr after the big bang. */
+  /** Lifetime of the universe: the simulation stops here, in Gyr after the big bang. */
   tEndGyr: number;
+  /** Hubble constant today, km/s/Mpc. 0 = static universe (no expansion, scale factor 1). */
+  H0: number;
+  /** Dark-energy fraction of a flat ΛCDM universe; matter = 1 − omegaLambda, radiation ignored. */
+  omegaLambda: number;
   seed: string;
 }
 
 /** Real galaxies in the observable universe (order of magnitude, Conselice et al. 2016). */
 export const REAL_GALAXIES = 2e12;
-/** Age of the universe today, for the "today" marker. */
+/** Age of the universe today. Only a fallback: with expansion on, "today" is SimResult.tToday. */
 export const TODAY_GYR = 13.8;
+/** 1 km/s/Mpc in 1/Gyr. Units: distance Gly, time Gyr, so c = 1. */
+export const KMS_MPC_TO_PER_GYR = 1.0227e-3;
+/** Number of samples in SimResult.scale. */
+export const SCALE_SAMPLES = 1024;
 
 export const DEFAULTS: Params = {
   dim: 2,
@@ -70,6 +78,8 @@ export const DEFAULTS: Params = {
   frontierRadiusGly: 10,
   defenderBonus: 1.5,
   tEndGyr: 200,
+  H0: 67.7, // Planck 2018
+  omegaLambda: 0.69, // Planck 2018
   seed: '5eed',
 };
 
@@ -90,6 +100,8 @@ export const RANGES = {
   frontierRadiusGly: [1, 100],
   defenderBonus: [1, 5],
   tEndGyr: [20, 1000],
+  H0: [0, 150],
+  omegaLambda: [0, 0.99],
 } as const satisfies Record<string, readonly [number, number]>;
 
 export interface Civ {
@@ -125,7 +137,8 @@ export interface CivEvent {
 
 export interface SimResult {
   params: Params; // after clamping
-  /** xyz per galaxy (z = 0 for 2d flat/torus; on the sphere surface for 'sphere'). In Gly. */
+  /** xyz per galaxy (z = 0 for 2d flat/torus; on the sphere surface for 'sphere'). Comoving
+   *  coordinates in Gly, i.e. physical distances at scale factor a = 1 ("today"). */
   positions: Float32Array;
   civs: Civ[];
   /** Sorted by t ascending (ties keep processing order). */
@@ -134,6 +147,16 @@ export interface SimResult {
   log: CivEvent[];
   /** Time the last event happened, or params.tEndGyr if the queue ran until the end. */
   tLast: number;
+  /** Scale factor a(t) at SCALE_SAMPLES evenly spaced times from 0 to params.tEndGyr inclusive
+   *  (sample i is at t = i * tEndGyr / (SCALE_SAMPLES - 1)). All 1 when H0 = 0. Physical
+   *  position at time t = positions × a(t). Interpolate linearly between samples. */
+  scale: Float32Array;
+  /** The symmetrised kNN neighbour graph the fronts travel along, as index pairs (i, j) with
+   *  i < j, each pair once: edges[2k], edges[2k+1]. The view draws borders on edges whose two
+   *  ends have different owners. */
+  edges: Uint32Array;
+  /** Time at which a = 1 ("today"), or null if that is not inside [0, tEndGyr]. H0 = 0 → TODAY_GYR. */
+  tToday: number | null;
 }
 
 /** engine.ts exports: `export function simulate(p: Partial<Params>): SimResult` */

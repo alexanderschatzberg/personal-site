@@ -123,3 +123,95 @@ Prove it with `npm run build` (the page appears in `dist/projects/grabby-aliens/
 
 - **Wave 1, in parallel:** U1 (engine) and U2 (page, using stubs). Each has its own worktree and branch.
 - **Integration:** merge U1, then U2, taking U1's engine and timeline over U2's stubs. Then gate with `npm test && npm run build`.
+
+---
+
+# Round 2: cosmic expansion, zoom/pan, borders, review minors
+
+These were added by the user after round 1. The contract additions in `types.ts` are Params `H0` and `omegaLambda` (with RANGES and DEFAULTS), the constants `KMS_MPC_TO_PER_GYR` and `SCALE_SAMPLES`, and SimResult `scale`, `tToday` and `edges`. `tEndGyr` is now presented as the universe's **lifetime**. The user's choices:
+- real ΛCDM cosmology
+- the universe visibly grows on screen: true size until today, slower after
+- borders drawn as outline lines (in 3D, faint translucent patches)
+- zoom and pan in both 2D and 3D
+
+## Acceptance criteria (round 2)
+
+14. With H0 = 0, simulate() gives exactly the same SimResult events and log as before the cosmology change (static universe, a ≡ 1), for the same params and seed.
+15. With the defaults, tToday is 13.8 ± 0.1 Gyr.
+16. Fronts travel in comoving distance at dχ/dt = v / a(t), and a galaxy beyond the event horizon is never reached.
+17. H0 and ΩΛ can be edited in the drawer, and the run-length field is labelled "lifetime".
+18. The displayed universe grows with time as specified below, with a scale bar and an a(t) readout.
+19. Zoom (wheel or pinch) and pan (drag; in 3D right-drag or shift-drag, while plain drag orbits) work in every view, and there is a `[reset view]` control.
+20. Borders between civs, and between a civ and unclaimed space, are drawn and update while scrubbing.
+21. The round 1 review minors are fixed (listed under U4 and U3).
+
+## U3: cosmology in the engine
+
+This unit **owns** `src/sim/grabby/cosmology.ts` (new), `engine.ts`, `geometry.ts`, and the engine tests. It must not change `types.ts`; report instead.
+
+- **`cosmology.ts`** works for flat ΛCDM, with Ωm = 1 − ΩΛ and H = H0 × KMS_MPC_TO_PER_GYR in 1/Gyr.
+  - Scale factor: a(t) = (Ωm/ΩΛ)^{1/3} · sinh^{2/3}(1.5·√ΩΛ·H·t). When ΩΛ = 0 it is (1.5·H·t)^{2/3}. When H0 = 0, a ≡ 1.
+  - Today: tToday = (2/(3H√ΩΛ))·asinh(√(ΩΛ/Ωm)), or 2/(3H) when ΩΛ = 0. Return null if it falls outside [0, tEnd]. When H0 = 0, return TODAY_GYR.
+  - Conformal time: η(t) = ∫₀ᵗ dt'/a(t'). Build a table that handles the t^{-2/3} singularity at 0, for example a nonuniform grid t = tEnd·s³ with s uniform, or analytic behaviour near 0. It must be monotonic, with an inverse η → t by interpolation or bisection. When H0 = 0, η(t) = t exactly.
+  - It exports the `scale` sampling as SCALE_SAMPLES values over [0, tEnd].
+- **`engine.ts`**: an arrival time is no longer t_send + d/v. Solve η(t_arr) = η(t_send) + d/v, where d is the comoving distance (the existing metric on `positions`). If the right-hand side is beyond η(tEnd), don't push the arrival. With H0 = 0 this must reduce *exactly* to the old arithmetic, so branch on it. The frontier radius stays comoving.
+- **Fill** `scale`, `tToday` and `edges`: the existing kNN graph, deduplicated, with i < j.
+- **Frontier performance** (review minor 5): the worst case dim 3, galaxies 50000, sizeGly 10, frontierRadiusGly 100, pLife 1e-10, mightModel frontier must finish in under 10 s in Node. One shortcut: when the radius covers the whole universe, use the held count. Pick whatever approach gets there, document it, and add a timed test.
+- **Tests, red-first:**
+  - criterion 14: snapshot-compare H0 = 0 against the pre-change engine. Commit a small fixture generated from the round 1 engine *before* changing it.
+  - criterion 15
+  - η is monotonic and inverts round-trip
+  - an event-horizon test: a 2-galaxy-style or tiny setup where the target is beyond the horizon is never reached, but would be reached with H0 = 0
+  - `edges` is valid: i < j, no duplicates, and it matches the kNN
+  - the frontier worst-case timing
+- **Report** the default civ counts with expansion on, for the same 6 seeds as round 1 (5eed, a, b, c, d, e), and the 50k 3d timing.
+
+## U4: view (expansion display, zoom and pan, borders, review fixes, view tests)
+
+This unit **owns** `src/pages/projects/grabby-aliens.astro`, `src/sim/grabby/view/**`, `worker.ts`, and new `src/sim/grabby/view/*.test.ts` (vitest is installed now; `npm test` runs it). It must not change `types.ts` or engine files. To run the page before U3 lands, it may add stub fields in the worker only, inside a commit whose subject starts with `TEMP stub`. Better: just build defensively, treating a missing `scale` as all 1s, a missing `edges` as computed in the view from nothing (no borders), and a missing `tToday` as TODAY_GYR, then remove those fallbacks once U3's fields are guaranteed by the contract. Simplest of all: don't stub, and code against the contract as written.
+
+- **Drawer:**
+  - an `H0` field (km/s/Mpc; 0 = no expansion)
+  - an `ΩΛ` field
+  - rename tEnd to "lifetime (Gyr)"
+  - a `[no expansion]` preset button that sets H0 to 0
+- **Growth display.** Let a(t) be the interpolated `scale`. The displayed scale is:
+  - s(t) = a(t) when a ≤ 1
+  - s(t) = 1 + ln(a(t)) when a > 1
+  - s(t) = 1 when H0 = 0
+
+  Rendered positions are the centred comoving position × s(t), via a scale on the Points object or a group, not by rewriting the buffer. The sphere radius scales the same way. When the 2D flat/torus/3D view is unzoomed, the camera fits the box at s = 1, so early times show a small dense universe growing to fill the view by today and then slowly overflowing it. In the bottom-left corner put:
+  - a scale bar: a fixed screen length labelled with the physical Gly it spans at the current a(t) and zoom
+  - a readout: `a = 0.42`
+- **Today mark.** It uses `tToday` (hidden if null).
+- **Zoom and pan:**
+  - Orthographic 2D: wheel or pinch zooms at the cursor and drag pans.
+  - Perspective sphere and 3D: drag orbits, wheel or pinch zooms (dolly), and right-drag or shift-drag pans.
+  - three's OrbitControls is fine here: `three/examples/jsm/controls/OrbitControls.js`, with rotation disabled in 2D.
+  - Add `[reset view]` to the top bar.
+  - Keep the existing auto-spin-until-touched behaviour.
+- **Borders.** For each edge (i, j) where owner[i] ≠ owner[j] and at least one is owned, draw a short segment for each owned side.
+  - In 2D, the segment is perpendicular to the edge at its midpoint, long enough to roughly match the edge length (about 0.6 × the edge length), offset slightly toward that owner's side, in that owner's colour.
+  - On the sphere, the segment is tangent to the surface.
+  - In 3D, draw a small translucent quad (opacity ~0.15) perpendicular to the edge at the midpoint, in the owner's colour.
+  - Implementation: one preallocated LineSegments geometry for 2D/sphere, or InstancedMesh for 3D, sized for every edge × 2, with the draw range set to the active count.
+  - Recompute after each seek, but only touching edges incident to `changed` galaxies. Keep an index from galaxy to its incident edges.
+  - Torus edges that wrap must not draw a line across the whole map. Use the minimum-image midpoint, and draw at both images or skip the wrapped portion.
+  - Borders get a `[borders]` toggle, on by default.
+- **Review fixes (round 1):**
+  1. Number inputs keep full precision: `fmt` is only for display labels, never for values written into inputs, or the value round-trips exactly.
+  2. Range inputs: don't let a slider's step snap the URL or param value. Pair each slider with a number input that holds the true value, or set the step to `any` and keep a separate state value.
+  3. Remove the double pixel-ratio multiplication on `material.size` (renderer.ts:97); three already applies the pixel ratio.
+  4. Upload only the changed colour ranges. Use `attribute.addUpdateRange` / `clearUpdateRanges` (three r160+), coalescing contiguous ranges, or fall back to a full upload when more than ~25% changed.
+- **Tests, red-first:**
+  - url round-trip, including full-precision values and hostile values
+  - field coverage of every RANGES key, including H0 and omegaLambda
+  - palette determinism
+  - playback math
+  - the growth display function s(a)
+  - border-segment selection for a tiny owner array plus edges, including the torus wrap case
+- **Prove it** with `npx vitest run src/sim/grabby/view`, `npm run build`, and a dev server curl 200 on port 4331 (stop it afterwards: `npx astro dev stop` or kill it).
+
+## Waves (round 2)
+
+U3 and U4 run in parallel in fresh worktrees off pm/grabby-aliens. Merge U3, then U4. Gate: `npm test && npm run build`. Then one fresh reviewer on the round 2 diff.
