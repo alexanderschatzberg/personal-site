@@ -6,7 +6,9 @@ import { DEFAULTS, RANGES, type Params, type SimResult, type Timeline } from '..
 import type { WorkerRequest, WorkerResponse } from '../worker';
 import { civName, currentMight, mightText, reuseLocalCount, temperamentWord, type LocalCountCache } from './civinfo';
 import { FIELDS, fmt, fromInput, TABS, toInput, type Tab } from './fields';
-import { displayScale, formatA, physicalPerRendered, scaleAt } from './growth';
+import { HELP, placeTip } from './help';
+import { ADVANCED_KEY, readFlag, writeFlag } from './prefs';
+import { displayScale, formatA, physicalPerRendered, runScaleAt } from './growth';
 import { advance, endStatus, nextSpeed, span, SPEEDS, step } from './playback';
 import { LANDSCAPE_MQ, PORTRAIT_MQ, type Layout } from './layout';
 import { civColor } from './palette';
@@ -53,7 +55,7 @@ export function mount(root: HTMLElement) {
   let t = 0;
   let tSpan = 0; // playable span: 0 .. tLast
   let a = 1; // scale factor at t
-  let s = 1; // displayed scale at t
+  let s = 1; // display scale d(t) = min(a, 1)
   let playing = false;
   let speed = 0;
   let lastFrame = 0;
@@ -112,6 +114,7 @@ export function mount(root: HTMLElement) {
     syncBar();
     tl = createTimeline(r);
     renderer.setResult(r);
+    $('.g-wrap').hidden = !(r.params.dim === 3 && r.params.geometry === 'torus');
     tSpan = span(r);
     scrubber.max = String(tSpan);
     const tToday = r.tToday;
@@ -139,7 +142,7 @@ export function mount(root: HTMLElement) {
   /** Scale the drawn universe for time t, and refresh the a(t) readout. */
   function grow() {
     if (!result) return;
-    a = scaleAt(result.scale, result.params.tEndGyr, t);
+    a = runScaleAt(result, t);
     s = displayScale(a, result.params.H0);
     out.a.textContent = `a = ${formatA(a)}`;
     renderer.setScale(s);
@@ -377,10 +380,24 @@ export function mount(root: HTMLElement) {
   handle.addEventListener('pointerup', endDrag);
   handle.addEventListener('pointercancel', endDrag);
 
-  // Tabs (portrait sheet): show one group of fields at a time.
+  // Basic / advanced. Desktop and the landscape rail: [advanced] expands a section under the
+  // basics. Portrait sheet: two tabs. One state, remembered per viewer.
+  const storage = (() => {
+    try {
+      return window.localStorage;
+    } catch {
+      return undefined;
+    }
+  })();
+  const advBtn = $<HTMLButtonElement>('.g-adv-toggle');
+  advBtn.addEventListener('click', () => selectTab(form.dataset.tab === 'advanced' ? 'basic' : 'advanced'));
   const tabs = $$<HTMLButtonElement>('.g-tab');
   function selectTab(tab: Tab, focus = false) {
     form.dataset.tab = tab;
+    writeFlag(storage, ADVANCED_KEY, tab === 'advanced');
+    advBtn.setAttribute('aria-expanded', String(tab === 'advanced'));
+    advBtn.textContent = tab === 'advanced' ? '[− advanced]' : '[+ advanced]';
+    closeTip();
     for (const b of tabs) {
       const on = b.dataset.tab === tab;
       b.setAttribute('aria-selected', String(on));
@@ -399,10 +416,63 @@ export function mount(root: HTMLElement) {
     });
   }
 
+  // ---------- [?] help tooltips ----------
+  // One tip at a time. Hover (mouse) shows it while over the button; focus shows it; a click or
+  // tap pins it open until another click, Escape, or a click elsewhere.
+  const tip = $('.g-tip');
+  let tipFor: HTMLButtonElement | null = null;
+  let tipPinned = false;
+  function openTip(btn: HTMLButtonElement, pin: boolean) {
+    if (tipFor && tipFor !== btn) closeTip();
+    tipFor = btn;
+    tipPinned = pin || tipPinned;
+    tip.textContent = HELP[btn.dataset.help!] ?? '';
+    tip.hidden = false;
+    btn.setAttribute('aria-describedby', tip.id);
+    btn.setAttribute('aria-expanded', 'true');
+    const box = tip.getBoundingClientRect();
+    const at = placeTip(btn.getBoundingClientRect(), box.width, box.height, window.innerWidth, window.innerHeight, 8);
+    tip.style.left = `${at.left}px`;
+    tip.style.top = `${at.top}px`;
+  }
+  function closeTip() {
+    if (!tipFor) return;
+    tipFor.removeAttribute('aria-describedby');
+    tipFor.setAttribute('aria-expanded', 'false');
+    tipFor = null;
+    tipPinned = false;
+    tip.hidden = true;
+  }
+  for (const b of $$<HTMLButtonElement>('.g-help')) {
+    b.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (tipFor === b && tipPinned) closeTip();
+      else openTip(b, true);
+    });
+    b.addEventListener('pointerenter', (e) => e.pointerType === 'mouse' && openTip(b, false));
+    b.addEventListener('pointerleave', (e) => e.pointerType === 'mouse' && tipFor === b && !tipPinned && closeTip());
+    b.addEventListener('focus', () => openTip(b, false));
+    b.addEventListener('blur', () => tipFor === b && closeTip());
+    b.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || tipFor !== b) return;
+      e.stopPropagation(); // close the tip, not the drawer
+      closeTip();
+    });
+  }
+  document.addEventListener('pointerdown', (e) => {
+    if (tipFor && !(e.target as Element).closest?.('.g-help, .g-tip')) closeTip();
+  });
+  $('.g-scroll').addEventListener('scroll', closeTip, { passive: true });
+  drawer.addEventListener('scroll', closeTip, { passive: true });
+
+  selectTab(readFlag(storage, ADVANCED_KEY) ? 'advanced' : 'basic');
   applyLayout();
   portraitMq.addEventListener('change', applyLayout);
   landscapeMq.addEventListener('change', applyLayout);
-  window.addEventListener('resize', applyLayout);
+  window.addEventListener('resize', () => {
+    applyLayout();
+    closeTip();
+  });
 
   const input = (name: string) => form.elements.namedItem(name) as HTMLInputElement | HTMLSelectElement;
 
@@ -511,14 +581,9 @@ export function mount(root: HTMLElement) {
 
   function showInfo() {
     if (picked < 0 || !tl || !result) return;
-    info.hidden = false;
     const o = tl.owner[picked];
-    info.toggleAttribute('data-empty', o < 0);
-    if (o < 0) {
-      infoOut.name.textContent = 'unclaimed galaxy';
-      infoOut.swatch.style.background = '';
-      return;
-    }
+    if (o < 0) return closeInfo(); // scrubbed back before it was claimed: unclaimed is never shown
+    info.hidden = false;
     const civ = result.civs[o];
     const p = result.params;
     const held = tl.held[o];
@@ -542,7 +607,8 @@ export function mount(root: HTMLElement) {
   }
   $('.g-info-close').addEventListener('click', closeInfo);
 
-  // A tap (or click) on the canvas picks a galaxy; drags rotate/pan as before. Multi-touch is never a tap.
+  // A tap (or click) on the canvas opens the region (owned galaxy) under it; anywhere else closes
+  // the card. Drags rotate/pan as before. Multi-touch is never a tap.
   const downs = new Map<number, { x: number; y: number; t: number }>();
   let multi = false;
   const canvas = renderer.canvas;
@@ -557,7 +623,7 @@ export function mount(root: HTMLElement) {
     if (downs.size === 0) multi = false;
     if (!d || wasMulti || e.type === 'pointercancel' || e.button > 0) return;
     if (!isTap(e.clientX - d.x, e.clientY - d.y, performance.now() - d.t)) return;
-    const g = renderer.pick(e.clientX, e.clientY, PICK_RADIUS_PX);
+    const g = tl ? renderer.pick(e.clientX, e.clientY, PICK_RADIUS_PX, tl.owner) : -1;
     if (g < 0) return closeInfo();
     picked = g;
     showInfo();

@@ -1,10 +1,12 @@
-// How the universe's growth is shown. Real a(t) spans tiny → huge, so the view shows true
-// size up to today (a ≤ 1) and grows only logarithmically after that.
+// How the universe's growth is shown. Rendered positions are physical (comoving × a(t)), and the
+// camera's auto-zoom divides by max(a, 1): before today the universe visibly grows from a dense
+// start, after today the map holds still while the scale bar and the a readout keep the true values.
+// Net effect on the drawing: comoving × d(t), with d(t) = min(a(t), 1).
 
 /** Guard: an overflowed (Infinity) or NaN sample is read as the largest finite double. */
 const finite = (v: number) => (v < Number.MAX_VALUE ? v : Number.MAX_VALUE);
 
-/** Scale factor at time t from SimResult.scale (evenly spaced over [0, tEnd]). Missing → 1. */
+/** Scale factor at time t from samples evenly spaced over [0, tEnd]. Missing → 1. */
 export function scaleAt(scale: ArrayLike<number> | undefined, tEnd: number, t: number): number {
   const n = scale?.length ?? 0;
   if (!scale || n === 0) return 1;
@@ -16,14 +18,19 @@ export function scaleAt(scale: ArrayLike<number> | undefined, tEnd: number, t: n
   return lo + (hi - lo) * f;
 }
 
-/** Displayed scale s(a): a when a ≤ 1, 1 + ln a when a > 1, and 1 with no expansion (H0 = 0). */
-export function displayScale(a: number, H0: number): number {
-  if (H0 === 0) return 1;
-  const x = finite(a); // only ln a is shown, so Infinity / NaN → the double max is plenty
-  return x <= 1 ? Math.max(0, x) : 1 + Math.log(x);
+/** a(t) of a run: SimResult.scale is sampled over [0, tLast]. */
+export function runScaleAt(r: { scale?: ArrayLike<number>; tLast: number }, t: number): number {
+  return scaleAt(r.scale, r.tLast, t);
 }
 
-/** Physical Gly per rendered (comoving × s) world unit: a / s. Equal to 1 while a ≤ 1. */
+/** Effective display scale d(t) = min(a, 1); 1 with no expansion (H0 = 0). */
+export function displayScale(a: number, H0: number): number {
+  if (H0 === 0) return 1;
+  const x = finite(a);
+  return x <= 1 ? Math.max(0, x) : 1;
+}
+
+/** Physical Gly per rendered (comoving × d) world unit: a / d. Equal to 1 while a ≤ 1. */
 export function physicalPerRendered(a: number, s: number): number {
   const x = finite(a);
   return x <= 1 || !(s > 0) || !Number.isFinite(s) ? 1 : x / s;

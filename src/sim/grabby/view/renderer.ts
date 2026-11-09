@@ -1,8 +1,10 @@
 // three.js view of a SimResult: one Points cloud with per-vertex colour, plus borders.
-// 2d flat/torus: orthographic, top-down (drag pans, wheel/pinch zooms at the cursor).
-// Sphere: perspective globe. 3d: perspective cube. Both orbit on drag, dolly on wheel/pinch and
-// pan on right-drag or shift-drag. The universe is drawn at its comoving positions × the
-// displayed scale s(t) (a scale on a group; the position buffer is never rewritten).
+// 2d flat: orthographic, top-down (drag pans, wheel/pinch zooms at the cursor).
+// Sphere: perspective globe. 2d torus: perspective donut (see donut.ts; the sim metric stays the
+// flat torus). 3d: perspective cube, dashed when its faces wrap. These orbit on drag, dolly on
+// wheel/pinch and pan on right-drag or shift-drag. The universe is drawn at its comoving
+// positions × the display scale d(t) = min(a, 1) (a scale on a group; the position buffer is
+// never rewritten), and the user's zoom and pan multiply on top.
 // Renders only when something changed or the view is moving.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -10,7 +12,8 @@ import type { SimResult, Timeline } from '../types';
 import { BorderSet, SEGMENT_FRACTION, slotFrame, slotSegment, type Space } from './borders';
 import { civColor } from './palette';
 import { MAX_PIXEL_RATIO } from './phone';
-import { nearestOnScreen } from './pick';
+import { donutRadii, donutSegment, embedPositions } from './donut';
+import { pickOwned, projectForPick, type Facing } from './pick';
 import { updateRanges } from './ranges';
 import { UploadTracker } from './upload';
 
@@ -53,6 +56,7 @@ class BorderLayer {
   private visible = true;
   private frame = new Float64Array(7);
   private seg = new Float64Array(6);
+  private mapped = new Float64Array(6);
   private m = new THREE.Matrix4();
   private q = new THREE.Quaternion();
   private dir = new THREE.Vector3();
@@ -67,6 +71,8 @@ class BorderLayer {
     edges: Uint32Array,
     private space: Space,
     private colorOf: (civ: number) => THREE.Color,
+    /** Maps a flat segment into the drawn space (the donut); absent = drawn as is. */
+    private mapSegment?: (seg: Float64Array, out: Float64Array) => void,
   ) {
     this.set = new BorderSet(edges, positions.length / 3);
     this.patches = space.dim === 3;
@@ -137,10 +143,11 @@ class BorderLayer {
       this.object.setColorAt(k, col);
     } else if (this.object) {
       slotSegment(f, this.space, this.seg);
+      if (this.mapSegment) this.mapSegment(this.seg, this.mapped);
       const geo = this.object.geometry;
       const pos = geo.getAttribute('position').array as Float32Array;
       const c = geo.getAttribute('color').array as Float32Array;
-      pos.set(this.seg, k * 6);
+      pos.set(this.mapSegment ? this.mapped : this.seg, k * 6);
       for (let v = 0; v < 2; v++) {
         c[k * 6 + v * 3] = col.r;
         c[k * 6 + v * 3 + 1] = col.g;
@@ -197,6 +204,8 @@ export class Renderer {
   private outline?: THREE.LineSegments;
   private occluder?: THREE.Mesh;
   private borders?: BorderLayer;
+  /** 2d torus: galaxy positions on the donut and their outward normals. */
+  private donut?: { world: Float32Array; normals: Float32Array };
   private bordersOn = true;
   private material: THREE.PointsMaterial;
   private result?: SimResult;
@@ -205,8 +214,9 @@ export class Renderer {
   private frame = 0;
   private extent = 1; // half-size of what the ortho camera must fit at s = 1
   private cleanup: (() => void)[] = [];
-  /** Screen positions for picking, reused between taps. */
+  /** Screen positions and depths for picking, reused between taps. */
   private screenXY = new Float32Array(0);
+  private depth = new Float32Array(0);
   /** Called after each rendered frame, e.g. to refresh the scale bar. */
   onView?: () => void;
 
@@ -242,8 +252,11 @@ export class Renderer {
     const n = r.positions.length / 3;
     this.disposeScene();
 
+    const sphere = geometry === 'sphere';
+    const donut = dim === 2 && geometry === 'torus';
+    this.donut = donut ? embedPositions(r.positions, L) : undefined;
     const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(r.positions, 3));
+    geo.setAttribute('position', new THREE.BufferAttribute(this.donut ? this.donut.world : r.positions, 3));
     this.colors = new Float32Array(n * 3);
     const colorAttr = new THREE.BufferAttribute(this.colors, 3).setUsage(THREE.DynamicDrawUsage);
     geo.setAttribute('color', colorAttr);
@@ -255,10 +268,18 @@ export class Renderer {
     this.group.rotation.set(0, 0, 0);
     this.scaler.scale.setScalar(1);
 
-    const sphere = geometry === 'sphere';
-    this.content.position.set(sphere ? 0 : -L / 2, sphere ? 0 : -L / 2, !sphere && dim === 3 ? -L / 2 : 0);
+    const centred = sphere || donut;
+    this.content.position.set(centred ? 0 : -L / 2, centred ? 0 : -L / 2, !centred && dim === 3 ? -L / 2 : 0);
 
-    if (sphere) {
+    if (donut) {
+      const { R, r: tube } = donutRadii(L);
+      // A background-coloured donut just inside the surface hides its far side.
+      this.occluder = new THREE.Mesh(new THREE.TorusGeometry(R, tube * 0.985, 48, 128), new THREE.MeshBasicMaterial());
+      this.scaler.add(this.occluder);
+      this.camera = this.persp;
+      this.persp.position.set(0, 0, this.fitDistance(R + tube));
+      this.group.rotation.set(-0.9, 0, 0);
+    } else if (sphere) {
       const R = L / (2 * Math.PI);
       // A background-coloured ball just inside the globe hides its far side.
       this.occluder = new THREE.Mesh(new THREE.SphereGeometry(R * 0.985, 48, 32), new THREE.MeshBasicMaterial());
@@ -267,8 +288,11 @@ export class Renderer {
       this.persp.position.set(0, 0, R * 4.2);
       this.group.rotation.set(0.35, 0, 0);
     } else if (dim === 3) {
+      // A wrapping (torus) cube gets a dashed outline, like the 2d wrap, plus the page's note.
       const box = new THREE.EdgesGeometry(new THREE.BoxGeometry(L, L, L));
-      this.outline = new THREE.LineSegments(box, new THREE.LineBasicMaterial());
+      const wraps = geometry === 'torus';
+      this.outline = new THREE.LineSegments(box, wraps ? new THREE.LineDashedMaterial({ dashSize: L / 60, gapSize: L / 60 }) : new THREE.LineBasicMaterial());
+      if (wraps) this.outline.computeLineDistances();
       this.scaler.add(this.outline);
       this.camera = this.persp;
       this.persp.position.set(0, 0, L * 2.6);
@@ -278,24 +302,27 @@ export class Renderer {
       this.ortho.position.set(0, 0, 100);
       this.ortho.zoom = 1;
       this.extent = L / 2;
-      if (geometry === 'torus') {
-        const h = L / 2;
-        const pts = [[-h, -h], [h, -h], [h, -h], [h, h], [h, h], [-h, h], [-h, h], [-h, -h]].map(([x, y]) => new THREE.Vector3(x, y, 0));
-        this.outline = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineDashedMaterial({ dashSize: L / 80, gapSize: L / 80 }));
-        this.outline.computeLineDistances();
-        this.scaler.add(this.outline);
-      }
     }
     this.camera.lookAt(0, 0, 0);
     this.camera.updateProjectionMatrix();
 
     const space: Space = { dim, geometry, sizeGly: L };
-    this.borders = new BorderLayer(this.content, r.positions, r.edges, space, (c) => this.civColor(c));
+    const { R, r: tube } = donutRadii(L);
+    const map = donut ? (seg: Float64Array, out: Float64Array) => donutSegment(seg, L, R, tube, out) : undefined;
+    this.borders = new BorderLayer(this.content, r.positions, r.edges, space, (c) => this.civColor(c), map);
     this.borders.setVisible(this.bordersOn);
 
     this.resize();
-    this.setupControls(dim === 2 && !sphere);
+    this.setupControls(dim === 2 && !sphere && !donut);
     this.applyTheme();
+  }
+
+  /** Camera distance that fits a ball of this radius (with a margin for the overlays) in the
+   *  current viewport, on narrow portrait screens too. */
+  private fitDistance(radius: number): number {
+    const w = this.container.clientWidth || 1, h = this.container.clientHeight || 1;
+    const half = Math.tan(THREE.MathUtils.degToRad(this.persp.fov) / 2) * Math.min(1, w / h);
+    return (radius * 1.3) / half;
   }
 
   private setupControls(flat: boolean) {
@@ -381,43 +408,27 @@ export class Renderer {
   }
 
   /**
-   * Galaxy nearest to a viewport point within maxPx CSS px, or -1. Projects every galaxy to the
-   * screen; points behind the camera, off screen or on the far side of the globe are skipped.
+   * The owned galaxy a tap at a viewport point opens, or -1 (see pickOwned). Projects every galaxy
+   * with the drawing's own transform (display scale, donut, user zoom); points behind the
+   * camera, off screen or on the far side of the globe or donut are skipped.
    */
-  pick(clientX: number, clientY: number, maxPx: number): number {
+  pick(clientX: number, clientY: number, maxPx: number, owner: Int32Array): number {
     const r = this.result;
     if (!r || !this.points) return -1;
-    const pos = r.positions;
-    const n = pos.length / 3;
-    if (this.screenXY.length !== n * 2) this.screenXY = new Float32Array(n * 2);
-    const xy = this.screenXY;
+    const n = r.positions.length / 3;
+    if (this.screenXY.length !== n * 2) {
+      this.screenXY = new Float32Array(n * 2);
+      this.depth = new Float32Array(n);
+    }
     this.scene.updateMatrixWorld();
     this.camera.updateMatrixWorld();
-    const world = this.content.matrixWorld.elements;
-    const clip = new THREE.Matrix4().multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse).multiply(this.content.matrixWorld).elements;
-    const rect = this.renderer.domElement.getBoundingClientRect();
-    const globe = !!this.occluder;
+    const viewProj = new THREE.Matrix4().multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse).elements;
+    const facing: Facing = this.donut ? { kind: 'normals', normals: this.donut.normals } : r.params.geometry === 'sphere' ? { kind: 'sphere' } : { kind: 'none' };
+    const local = this.donut ? this.donut.world : r.positions;
     const cam = this.camera.position;
-    for (let i = 0; i < n; i++) {
-      const x = pos[3 * i], y = pos[3 * i + 1], z = pos[3 * i + 2];
-      xy[2 * i] = xy[2 * i + 1] = NaN;
-      if (globe) {
-        // World position p on a sphere centred at the origin: visible when the camera is on the
-        // outer side of the tangent plane at p, i.e. p · (cam − p) > 0.
-        const px = world[0] * x + world[4] * y + world[8] * z + world[12];
-        const py = world[1] * x + world[5] * y + world[9] * z + world[13];
-        const pz = world[2] * x + world[6] * y + world[10] * z + world[14];
-        if (px * (cam.x - px) + py * (cam.y - py) + pz * (cam.z - pz) <= 0) continue;
-      }
-      const w = clip[3] * x + clip[7] * y + clip[11] * z + clip[15];
-      if (!(w > 0)) continue;
-      const nx = (clip[0] * x + clip[4] * y + clip[8] * z + clip[12]) / w;
-      const ny = (clip[1] * x + clip[5] * y + clip[9] * z + clip[13]) / w;
-      if (nx < -1 || nx > 1 || ny < -1 || ny > 1) continue;
-      xy[2 * i] = rect.left + ((nx + 1) / 2) * rect.width;
-      xy[2 * i + 1] = rect.top + ((1 - ny) / 2) * rect.height;
-    }
-    return nearestOnScreen(xy, clientX, clientY, maxPx);
+    projectForPick(local, facing, this.content.matrixWorld.elements, viewProj, [cam.x, cam.y, cam.z], this.renderer.domElement.getBoundingClientRect(), this.screenXY, this.depth);
+    const persp = this.camera instanceof THREE.PerspectiveCamera;
+    return pickOwned(this.screenXY, persp ? this.depth : null, owner, clientX, clientY, maxPx);
   }
 
   /** Rendered world units per CSS pixel at the view's focus (the controls' target). */
@@ -478,6 +489,7 @@ export class Renderer {
       if (o !== this.points) (o.material as THREE.Material).dispose();
     }
     this.points = this.outline = this.occluder = undefined;
+    this.donut = undefined;
   }
 
   dispose() {

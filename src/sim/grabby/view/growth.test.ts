@@ -1,20 +1,36 @@
 import { describe, expect, it } from 'vitest';
 import { makeCosmology } from '../cosmology';
 import { fmt } from './fields';
-import { displayScale, formatA, physicalPerRendered, scaleAt } from './growth';
+import { displayScale, formatA, physicalPerRendered, runScaleAt, scaleAt } from './growth';
 
 describe('growth display', () => {
-  it('s(a) = a up to today, 1 + ln a after, 1 with no expansion', () => {
+  it('d(t) = min(a, 1): grows to today, then the map holds still; 1 with no expansion', () => {
     expect(displayScale(0, 67.7)).toBe(0);
     expect(displayScale(0.42, 67.7)).toBe(0.42);
     expect(displayScale(1, 67.7)).toBe(1);
-    expect(displayScale(Math.E, 67.7)).toBeCloseTo(2);
-    expect(displayScale(100, 67.7)).toBeCloseTo(1 + Math.log(100));
+    expect(displayScale(Math.E, 67.7)).toBe(1);
+    expect(displayScale(100, 67.7)).toBe(1);
+    expect(displayScale(1e300, 67.7)).toBe(1);
+    expect(displayScale(Infinity, 67.7)).toBe(1);
     expect(displayScale(0.3, 0)).toBe(1);
-    expect(displayScale(7, 0)).toBe(1);
   });
 
-  it('s is continuous and increasing through a = 1', () => {
+  it('the scale bar reads true physical length: a / d(t) per rendered unit', () => {
+    expect(physicalPerRendered(Math.E, displayScale(Math.E, 70))).toBeCloseTo(Math.E);
+    expect(physicalPerRendered(100, displayScale(100, 70))).toBeCloseTo(100);
+    expect(physicalPerRendered(0.5, displayScale(0.5, 70))).toBe(1);
+  });
+
+  it('reads a(t) from the run: samples span [0, tLast], not [0, tEndGyr]', () => {
+    const r = { scale: new Float64Array([0, 0.5, 1, 3]), tLast: 30, params: { tEndGyr: 5000 } };
+    expect(runScaleAt(r, 0)).toBe(0);
+    expect(runScaleAt(r, 15)).toBeCloseTo(0.75);
+    expect(runScaleAt(r, 30)).toBeCloseTo(3);
+    expect(runScaleAt(r, 40)).toBeCloseTo(3);
+    expect(runScaleAt({ ...r, tLast: 0 }, 5)).toBe(0);
+  });
+
+  it('d is continuous and non-decreasing through a = 1', () => {
     expect(displayScale(1 + 1e-9, 70)).toBeCloseTo(1, 8);
     let prev = -1;
     for (let a = 0; a < 50; a += 0.01) {
@@ -59,23 +75,25 @@ describe('growth display', () => {
       expect(Number.isFinite(s)).toBe(true);
       expect(Number.isFinite(physicalPerRendered(x, s))).toBe(true);
     }
-    expect(displayScale(Infinity, 70)).toBeGreaterThan(1 + Math.log(1e38));
+    expect(physicalPerRendered(Infinity, displayScale(Infinity, 70))).toBeGreaterThan(1e38);
   });
 
-  it('keeps growing to tEnd when a(t) passes Float32 max (H0 = 150, ΩΛ = 0.99, tEnd = 1000)', () => {
+  it('the true a(t) and scale bar keep growing to the end when a passes Float32 max (H0 = 150, ΩΛ = 0.99, tEnd = 1000)', () => {
     const tEnd = 1000;
     const c = makeCosmology(150, 0.99, tEnd);
     let prev = -Infinity;
     for (let i = 0; i < c.scale.length; i++) {
       const t = (i * tEnd) / (c.scale.length - 1);
-      const s = displayScale(scaleAt(c.scale, tEnd, t), 150);
-      expect(s).toBeGreaterThan(prev);
-      prev = s;
+      const a = scaleAt(c.scale, tEnd, t);
+      const perRendered = physicalPerRendered(a, displayScale(a, 150));
+      expect(a).toBeGreaterThan(prev);
+      expect(Number.isFinite(perRendered)).toBe(true);
+      prev = a;
     }
     const aEnd = c.a(tEnd);
     expect(aEnd).toBeGreaterThan(1e60);
     expect(scaleAt(c.scale, tEnd, tEnd) / aEnd).toBeCloseTo(1, 12);
-    expect(prev).toBeCloseTo(1 + Math.log(aEnd), 9);
+    expect(physicalPerRendered(aEnd, displayScale(aEnd, 150)) / aEnd).toBeCloseTo(1, 12);
   });
 
   it('formats the a readout compactly for tiny, ordinary and huge values', () => {

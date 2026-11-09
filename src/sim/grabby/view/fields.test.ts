@@ -1,18 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { RANGES } from '../types';
-import { FIELDS, fromInput, TABS, toInput } from './fields';
+import { ADVANCED, BASIC, FIELDS, fromInput, TABS, toInput } from './fields';
 
 describe('drawer fields', () => {
-  it('covers every RANGES key exactly once, including H0 and omegaLambda', () => {
+  it('covers every RANGES key except the hidden safety cap exactly once, including H0 and omegaLambda', () => {
     const keys = FIELDS.map((f) => f.key).sort();
-    expect(keys).toEqual(Object.keys(RANGES).sort());
+    expect(keys).toEqual(Object.keys(RANGES).filter((k) => k !== 'tEndGyr').sort());
     expect(keys).toContain('H0');
     expect(keys).toContain('omegaLambda');
   });
 
-  it('labels the run length as the lifetime', () => {
-    const f = FIELDS.find((x) => x.key === 'tEndGyr')!;
-    expect(`${f.label} (${f.unit})`).toBe('lifetime (Gyr)');
+  it('never shows tEndGyr (a hidden safety cap): no field, not basic, not advanced', () => {
+    expect(FIELDS.some((x) => (x.key as string) === 'tEndGyr')).toBe(false);
+    expect(FIELDS.some((x) => /lifetime/i.test(x.label))).toBe(false);
+    expect([...BASIC, ...ADVANCED]).not.toContain('tEndGyr');
   });
 
   it('labels the origin window as the life window, next to hard steps', () => {
@@ -39,17 +40,30 @@ describe('drawer fields', () => {
   });
 });
 
-describe('phone sheet tabs', () => {
-  it('groups every field into space · life · war · cosmos, each tab non-empty', () => {
-    expect(TABS).toEqual(['space', 'life', 'war', 'cosmos']);
-    for (const f of FIELDS) expect(TABS, f.key).toContain(f.group);
-    for (const t of TABS) expect(FIELDS.some((f) => f.group === t), t).toBe(true);
+describe('basic and advanced', () => {
+  it('basic holds exactly galaxies, clumpiness, p(life), speed min/max, temperament mean and seed', () => {
+    expect([...BASIC].sort()).toEqual(['clumpiness', 'galaxies', 'pLife', 'seed', 'speedMax', 'speedMin', 'temperMean'].sort());
   });
 
-  it('puts the might-model fields with war and the expansion fields with cosmos', () => {
-    const group = (k: string) => FIELDS.find((f) => f.key === k)!.group;
-    for (const k of ['mightExponent', 'frontierRadiusGly', 'temperMean', 'defenderBonus']) expect(group(k), k).toBe('war');
-    for (const k of ['H0', 'omegaLambda', 'tEndGyr']) expect(group(k), k).toBe('cosmos');
-    for (const k of ['sizeGly', 'galaxies']) expect(group(k), k).toBe('space');
+  it('advanced holds everything else, including the might model and [no expansion]', () => {
+    expect([...ADVANCED].sort()).toEqual(
+      [
+        'sizeGly', 'webScaleGly', 'planetsPerGalaxy', 'hardSteps', 'lifeWindowGyr', 'temperSpread', 'mightModel',
+        'mightMin', 'mightMax', 'mightExponent', 'frontierRadiusGly', 'defenderBonus', 'H0', 'omegaLambda', 'noExpansion',
+      ].sort(),
+    );
+  });
+
+  it('every numeric field is in exactly one of basic / advanced, matching its tab', () => {
+    for (const f of FIELDS) {
+      const inBasic = (BASIC as readonly string[]).includes(f.key);
+      const inAdv = (ADVANCED as readonly string[]).includes(f.key);
+      expect(inBasic !== inAdv, f.key).toBe(true);
+      expect(f.group, f.key).toBe(inBasic ? 'basic' : 'advanced');
+    }
+  });
+
+  it('phone sheet tabs are basic · advanced', () => {
+    expect(TABS).toEqual(['basic', 'advanced']);
   });
 });

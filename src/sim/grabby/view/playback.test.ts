@@ -20,7 +20,7 @@ describe('playback', () => {
     expect(step(50, 1, 100)).toBeCloseTo(51);
   });
 
-  it('the span is tLast, capped by the lifetime', () => {
+  it('the span is tLast, capped by the safety cap tEndGyr', () => {
     expect(span({ tLast: 42, params: { tEndGyr: 200 } })).toBe(42);
     expect(span({ tLast: 200, params: { tEndGyr: 200 } })).toBe(200);
     expect(span({ tLast: 250, params: { tEndGyr: 200 } })).toBe(200);
@@ -29,7 +29,7 @@ describe('playback', () => {
 
   it('reports why the run ended, only once the end is reached', () => {
     expect(endStatus(10, 42, 200)).toBeNull();
-    expect(endStatus(42, 42, 200)).toBe('ended · no more galaxies reachable');
-    expect(endStatus(200, 200, 200)).toBe('ended · lifetime reached');
+    expect(endStatus(42, 42, 200)).toBe('ended · no more galaxies in reach');
+    expect(endStatus(200, 200, 200)).toBe('ended · cap reached');
   });
 });

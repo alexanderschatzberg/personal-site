@@ -1,11 +1,12 @@
 // The drawer's fields, shared by the page markup (labels, ranges) and the controller
-// (reading and writing values). Every numeric Params key appears exactly once.
+// (reading and writing values). Every numeric Params key appears exactly once, except tEndGyr:
+// a hidden safety cap that is never shown.
 import { RANGES } from '../types';
 
-export type NumKey = keyof typeof RANGES;
+export type NumKey = Exclude<keyof typeof RANGES, 'tEndGyr'>;
 
-/** Tabs of the phone bottom sheet. The desktop drawer shows every group at once. */
-export const TABS = ['space', 'life', 'war', 'cosmos'] as const;
+/** Tabs of the phone bottom sheet. On desktop, advanced is a collapsible section. */
+export const TABS = ['basic', 'advanced'] as const;
 export type Tab = (typeof TABS)[number];
 
 export interface NumField {
@@ -25,25 +26,31 @@ export interface NumField {
 }
 
 export const FIELDS: NumField[] = [
-  { key: 'sizeGly', group: 'space', label: 'size', unit: 'Gly', input: 'number', slider: 1 },
-  { key: 'galaxies', group: 'space', label: 'galaxies', input: 'number', slider: 500 },
-  { key: 'pLife', group: 'life', label: 'p(life) / planet', input: 'number' },
-  { key: 'planetsPerGalaxy', group: 'life', label: 'planets / galaxy', input: 'number' },
-  { key: 'hardSteps', group: 'life', label: 'hard steps', input: 'number' },
-  { key: 'lifeWindowGyr', group: 'life', label: 'life window', unit: 'Gyr', input: 'number', note: 'civilizations can only arise before this' },
-  { key: 'speedMin', group: 'life', label: 'speed min', unit: 'c', input: 'number' },
-  { key: 'speedMax', group: 'life', label: 'speed max', unit: 'c', input: 'number' },
-  { key: 'temperMean', group: 'war', label: 'temperament', input: 'number', slider: 0.01, note: '0 peaceful · 1 aggressive' },
-  { key: 'temperSpread', group: 'war', label: 'temper spread', input: 'number' },
-  { key: 'mightMin', group: 'war', label: 'base might min', input: 'number' },
-  { key: 'mightMax', group: 'war', label: 'base might max', input: 'number' },
-  { key: 'mightExponent', group: 'war', label: 'α (N^α)', input: 'number', model: 'power' },
-  { key: 'frontierRadiusGly', group: 'war', label: 'frontier radius', unit: 'Gly', input: 'number', model: 'frontier' },
-  { key: 'defenderBonus', group: 'war', label: 'defender bonus', unit: '×', input: 'number' },
-  { key: 'tEndGyr', group: 'cosmos', label: 'lifetime', unit: 'Gyr', input: 'number', note: 'upper cap; the run ends earlier once nothing more can be reached' },
-  { key: 'H0', group: 'cosmos', label: 'H0', unit: 'km/s/Mpc', input: 'number', note: '0 = no expansion' },
-  { key: 'omegaLambda', group: 'cosmos', label: 'ΩΛ', input: 'number', note: 'dark energy; matter = 1 − ΩΛ' },
+  { key: 'galaxies', group: 'basic', label: 'galaxies', input: 'number', slider: 500 },
+  { key: 'clumpiness', group: 'basic', label: 'clumpiness', input: 'number', slider: 0.01, note: '0 uniform · 1 strong cosmic web' },
+  { key: 'pLife', group: 'basic', label: 'p(life) / planet', input: 'number' },
+  { key: 'speedMin', group: 'basic', label: 'speed min', unit: 'c', input: 'number' },
+  { key: 'speedMax', group: 'basic', label: 'speed max', unit: 'c', input: 'number' },
+  { key: 'temperMean', group: 'basic', label: 'temperament', input: 'number', slider: 0.01, note: '0 peaceful · 1 aggressive' },
+  { key: 'sizeGly', group: 'advanced', label: 'universe size', unit: 'Gly', input: 'number', slider: 1 },
+  { key: 'webScaleGly', group: 'advanced', label: 'web scale', unit: 'Gly', input: 'number' },
+  { key: 'planetsPerGalaxy', group: 'advanced', label: 'planets / galaxy', input: 'number' },
+  { key: 'hardSteps', group: 'advanced', label: 'hard steps', input: 'number' },
+  { key: 'lifeWindowGyr', group: 'advanced', label: 'life window', unit: 'Gyr', input: 'number', note: 'civilizations can only arise before this' },
+  { key: 'temperSpread', group: 'advanced', label: 'temper spread', input: 'number' },
+  { key: 'mightMin', group: 'advanced', label: 'base might min', input: 'number' },
+  { key: 'mightMax', group: 'advanced', label: 'base might max', input: 'number' },
+  { key: 'mightExponent', group: 'advanced', label: 'α (N^α)', input: 'number', model: 'power' },
+  { key: 'frontierRadiusGly', group: 'advanced', label: 'frontier radius', unit: 'Gly', input: 'number', model: 'frontier' },
+  { key: 'defenderBonus', group: 'advanced', label: 'defender bonus', unit: '×', input: 'number' },
+  { key: 'H0', group: 'advanced', label: 'H0', unit: 'km/s/Mpc', input: 'number', note: '0 = no expansion' },
+  { key: 'omegaLambda', group: 'advanced', label: 'ΩΛ', input: 'number', note: 'dark energy; matter = 1 − ΩΛ' },
 ];
+
+/** Controls in the basic part of the drawer (numeric fields plus the seed box). */
+export const BASIC = [...FIELDS.filter((f) => f.group === 'basic').map((f) => f.key), 'seed'] as const;
+/** Controls in the advanced part (numeric fields, the might model and [no expansion]). */
+export const ADVANCED = [...FIELDS.filter((f) => f.group === 'advanced').map((f) => f.key), 'mightModel', 'noExpansion'] as const;
 
 /** Compact number for labels only: 1e-22, 1e+11 → 1e11, 4,000, 0.6. Lossy; never use for values. */
 export function fmt(v: number): string {
