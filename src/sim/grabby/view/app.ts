@@ -1,12 +1,19 @@
 // Page controller: reads params from the URL, runs the worker, drives the timeline,
 // the renderer, the drawer and the time bar.
+import { Space } from '../geometry';
 import { createTimeline } from '../timeline';
-import { DEFAULTS, type Params, type SimResult, type Timeline } from '../types';
+import { DEFAULTS, RANGES, type Params, type SimResult, type Timeline } from '../types';
 import type { WorkerRequest, WorkerResponse } from '../worker';
-import { FIELDS, fmt, fromInput, toInput } from './fields';
+import { civName, currentMight, mightText, temperamentWord } from './civinfo';
+import { FIELDS, fmt, fromInput, TABS, toInput, type Tab } from './fields';
 import { displayScale, physicalPerRendered, scaleAt } from './growth';
 import { advance, endStatus, nextSpeed, span, SPEEDS, step } from './playback';
+import { LANDSCAPE_MQ, PORTRAIT_MQ, type Layout } from './layout';
+import { civColor } from './palette';
+import { capGalaxies, isPhone, PHONE_GALAXY_CAP, phoneParams } from './phone';
+import { isTap, PICK_RADIUS_PX } from './pick';
 import { Renderer } from './renderer';
+import { cycleSnap, snapAfterDrag, snapHeights, stepSnap, type Snap } from './sheet';
 import { clampNum, clipSeed, paramsToQuery, queryToParams } from './url';
 
 export function mount(root: HTMLElement) {
@@ -30,12 +37,17 @@ export function mount(root: HTMLElement) {
     ended: $('.g-ended'),
     a: $('.g-a'),
     scale: $('.g-scalebar-label'),
+    miniTime: $('.g-mini-time'),
+    miniPct: $('.g-mini-pct'),
   };
   const bordersBtn = $('.g-borders');
   /** Screen length of the scale bar, CSS px (matches .g-scalebar-line in the page). */
   const SCALE_BAR_PX = 100;
 
-  let params: Params = { ...DEFAULTS, ...queryToParams(location.search) };
+  // Phones start lighter unless the URL says otherwise (see phone.ts).
+  const phone = isPhone({ coarse: matchMedia('(pointer: coarse)').matches, screenW: screen.width, screenH: screen.height });
+  const start = phoneParams(phone, queryToParams(location.search));
+  let params: Params = { ...DEFAULTS, ...start.params };
   let result: SimResult | undefined;
   let tl: Timeline | undefined;
   let t = 0;
@@ -93,6 +105,8 @@ export function mount(root: HTMLElement) {
 
   function load(r: SimResult) {
     result = r;
+    space = undefined;
+    closeInfo();
     params = { ...r.params };
     writeForm();
     syncBar();
@@ -119,6 +133,7 @@ export function mount(root: HTMLElement) {
     renderer.update(tl);
     grow();
     readout();
+    showInfo();
   }
 
   /** Scale the drawn universe for time t, and refresh the a(t) readout. */
@@ -142,8 +157,11 @@ export function mount(root: HTMLElement) {
   function readout() {
     if (!tl || !result) return;
     const n = result.positions.length / 3;
+    const pct = n ? (tl.claimed / n) * 100 : 0;
     out.time.textContent = t.toFixed(1);
-    out.claimed.textContent = n ? ((tl.claimed / n) * 100).toFixed(1) : '0';
+    out.claimed.textContent = n ? pct.toFixed(1) : '0';
+    out.miniTime.textContent = t.toFixed(1);
+    out.miniPct.textContent = String(Math.round(pct));
     out.alive.textContent = String(tl.alive);
     out.ended.textContent = endStatus(t, result.tLast, result.params.tEndGyr) ?? '';
     if (document.activeElement !== scrubber || !playing) scrubber.value = String(t);
@@ -234,20 +252,157 @@ export function mount(root: HTMLElement) {
     renderer.setBorders(on);
   });
 
-  // ---------- drawer ----------
+  // ---------- drawer / sheet / rail ----------
+  // Desktop: [params] opens a right drawer. Landscape phone: [≡] opens a right rail. Portrait
+  // phone: the drawer is a bottom sheet with three snaps; [≡] and its handle move it.
+  const handle = $<HTMLButtonElement>('.g-handle');
+  const sheetView = $('.g-sheet-view');
+  const top = $('.g-top');
+  const portraitMq = matchMedia(PORTRAIT_MQ);
+  const landscapeMq = matchMedia(LANDSCAPE_MQ);
+  let layout: Layout | undefined;
+  let snap: Snap = 'collapsed';
+
+  /** The view toggles and the theme button live in the top bar on desktop, in the sheet/rail on
+   *  phones. They are moved, not copied, so their state and listeners stay single. */
+  const movable = [$('.g-view'), $('.theme-toggle')].map((el) => ({ el, parent: el.parentElement!, next: el.nextSibling }));
+  function placeToggles(inSheet: boolean) {
+    if (inSheet) for (const m of movable) sheetView.append(m.el);
+    else for (const m of movable) m.parent.insertBefore(m.el, m.next);
+  }
+
   function setDrawer(open: boolean) {
     drawer.hidden = !open;
     drawerBtn.setAttribute('aria-expanded', String(open));
-    drawerBtn.textContent = open ? '[× params]' : '[params]';
+    drawerBtn.textContent = layout === 'landscape' ? (open ? '[×]' : '[≡]') : open ? '[× params]' : '[params]';
   }
-  drawerBtn.addEventListener('click', () => setDrawer(drawer.hidden));
+
+  function heights() {
+    const bottom = drawer.getBoundingClientRect().bottom;
+    const avail = bottom - top.getBoundingClientRect().bottom;
+    return snapHeights(root.clientHeight, handle.offsetHeight || 44, avail);
+  }
+
+  function setSnap(next: Snap) {
+    snap = next;
+    drawer.dataset.snap = next;
+    drawer.style.setProperty('--sheet-h', `${heights()[next]}px`);
+    const open = next !== 'collapsed';
+    handle.setAttribute('aria-expanded', String(open));
+    drawerBtn.setAttribute('aria-expanded', String(open));
+    handle.setAttribute('aria-label', `Parameters sheet, ${next}`);
+  }
+
+  function applyLayout() {
+    const next: Layout = portraitMq.matches ? 'portrait' : landscapeMq.matches ? 'landscape' : 'desktop';
+    if (next === layout) {
+      if (next === 'portrait') setSnap(snap); // re-measure after a resize
+      return;
+    }
+    layout = next;
+    root.dataset.layout = next;
+    placeToggles(next !== 'desktop');
+    if (next === 'portrait') {
+      drawer.hidden = false;
+      drawerBtn.textContent = '[≡]';
+      drawerBtn.setAttribute('aria-label', 'Parameters');
+      setSnap('collapsed');
+    } else {
+      delete drawer.dataset.snap;
+      drawer.style.removeProperty('--sheet-h');
+      if (next === 'landscape') drawerBtn.setAttribute('aria-label', 'Parameters');
+      else drawerBtn.removeAttribute('aria-label');
+      setDrawer(next === 'landscape' || matchMedia('(min-width: 900px)').matches);
+    }
+  }
+
+  drawerBtn.addEventListener('click', () => {
+    if (layout === 'portrait') setSnap(cycleSnap(snap));
+    else setDrawer(drawer.hidden);
+  });
   drawer.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
+    if (e.key !== 'Escape') return;
+    if (layout === 'portrait') {
+      setSnap('collapsed');
+      handle.focus();
+    } else {
       setDrawer(false);
       drawerBtn.focus();
     }
   });
-  setDrawer(matchMedia('(min-width: 900px)').matches);
+
+  // Handle: tap or Enter/Space cycles, ↑/↓ step, drag follows the finger and snaps on release.
+  let drag: { id: number; y0: number; h0: number; t0: number; lastY: number; lastT: number; v: number; moved: boolean } | undefined;
+  let swallowClick = false;
+  handle.addEventListener('click', () => {
+    if (swallowClick) return void (swallowClick = false);
+    setSnap(cycleSnap(snap));
+  });
+  handle.addEventListener('keydown', (e) => {
+    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+    e.preventDefault();
+    setSnap(stepSnap(snap, e.key === 'ArrowUp' ? 1 : -1));
+  });
+  handle.addEventListener('pointerdown', (e) => {
+    if (layout !== 'portrait' || drag) return;
+    handle.setPointerCapture(e.pointerId);
+    const now = performance.now();
+    drag = { id: e.pointerId, y0: e.clientY, h0: drawer.getBoundingClientRect().height, t0: now, lastY: e.clientY, lastT: now, v: 0, moved: false };
+  });
+  handle.addEventListener('pointermove', (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const now = performance.now();
+    if (!drag.moved && isTap(0, e.clientY - drag.y0, 0)) return;
+    drag.moved = true;
+    drawer.toggleAttribute('data-dragging', true);
+    const hs = heights();
+    const h = Math.min(hs.full, Math.max(hs.collapsed, drag.h0 + drag.y0 - e.clientY));
+    drawer.style.setProperty('--sheet-h', `${h}px`);
+    if (now > drag.lastT) drag.v = (drag.lastY - e.clientY) / (now - drag.lastT);
+    drag.lastY = e.clientY;
+    drag.lastT = now;
+  });
+  const endDrag = (e: PointerEvent) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const d = drag;
+    drag = undefined;
+    drawer.removeAttribute('data-dragging');
+    if (!d.moved) return; // a tap: the click handler cycles
+    swallowClick = true;
+    setTimeout(() => (swallowClick = false), 0);
+    // A pause before release cancels the flick.
+    const v = performance.now() - d.lastT > 100 ? 0 : d.v;
+    setSnap(snapAfterDrag(drawer.getBoundingClientRect().height, v, heights()));
+  };
+  handle.addEventListener('pointerup', endDrag);
+  handle.addEventListener('pointercancel', endDrag);
+
+  // Tabs (portrait sheet): show one group of fields at a time.
+  const tabs = $$<HTMLButtonElement>('.g-tab');
+  function selectTab(tab: Tab, focus = false) {
+    form.dataset.tab = tab;
+    for (const b of tabs) {
+      const on = b.dataset.tab === tab;
+      b.setAttribute('aria-selected', String(on));
+      b.tabIndex = on ? 0 : -1;
+      if (on && focus) b.focus();
+    }
+  }
+  for (const b of tabs) {
+    b.addEventListener('click', () => selectTab(b.dataset.tab as Tab));
+    b.addEventListener('keydown', (e) => {
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      e.preventDefault();
+      e.stopPropagation(); // not a time step
+      const i = TABS.indexOf(b.dataset.tab as Tab) + (e.key === 'ArrowRight' ? 1 : -1);
+      selectTab(TABS[(i + TABS.length) % TABS.length], true);
+    });
+  }
+
+  applyLayout();
+  portraitMq.addEventListener('change', applyLayout);
+  landscapeMq.addEventListener('change', applyLayout);
+  window.addEventListener('resize', applyLayout);
 
   const input = (name: string) => form.elements.namedItem(name) as HTMLInputElement | HTMLSelectElement;
 
@@ -285,6 +440,7 @@ export function mount(root: HTMLElement) {
       const v = fromInput(input(f.key).value);
       next[f.key] = v !== null ? clampNum(f.key, v) : params[f.key];
     }
+    next.galaxies = capGalaxies(phone, next.galaxies!, params.galaxies);
     next.mightModel = input('mightModel').value as Params['mightModel'];
     const seed = clipSeed(input('seed').value);
     next.seed = seed || params.seed;
@@ -306,10 +462,104 @@ export function mount(root: HTMLElement) {
     apply({ ...readForm(), seed });
   });
 
+  // ---------- phone galaxies cap and heavy-run note ----------
+  if (phone) {
+    const g = input('galaxies') as HTMLInputElement;
+    g.max = String(PHONE_GALAXY_CAP);
+    const sl = root.querySelector<HTMLInputElement>('input[data-slider="galaxies"]');
+    if (sl) sl.max = String(PHONE_GALAXY_CAP);
+    const hint = g.closest('.g-field')?.querySelector('.g-hint');
+    if (hint) hint.textContent = `range ${fmt(RANGES.galaxies[0])} – ${fmt(PHONE_GALAXY_CAP)} on this device`;
+  }
+  const note = $('.g-note');
+  note.hidden = !start.heavy;
+  $('.g-note-close').addEventListener('click', () => (note.hidden = true));
+
+  // ---------- tap for info ----------
+  const info = $('.g-info');
+  const infoOut = {
+    swatch: $('.g-swatch'),
+    name: $('.g-info-name'),
+    t0: $('.g-info-t0'),
+    speed: $('.g-info-speed'),
+    temper: $('.g-info-temper'),
+    base: $('.g-info-base'),
+    model: $('.g-info-model'),
+    might: $('.g-info-might'),
+    held: $('.g-info-held'),
+  };
+  let picked = -1;
+  let space: Space | undefined;
+  const sig = (v: number) => fmt(Number(v.toPrecision(3)));
+
+  /** Own galaxies within the frontier radius of g (the engine's frontier count). */
+  function localCount(g: number, civ: number): number {
+    const r = result!;
+    space ??= new Space(r.positions, r.params.dim, r.params.geometry, r.params.sizeGly);
+    if (r.params.frontierRadiusGly >= space.maxDist * (1 + 1e-12)) return tl!.held[civ];
+    return space.countWithin(g, r.params.frontierRadiusGly, tl!.owner, civ);
+  }
+
+  function showInfo() {
+    if (picked < 0 || !tl || !result) return;
+    info.hidden = false;
+    const o = tl.owner[picked];
+    info.toggleAttribute('data-empty', o < 0);
+    if (o < 0) {
+      infoOut.name.textContent = 'unclaimed galaxy';
+      infoOut.swatch.style.background = '';
+      return;
+    }
+    const civ = result.civs[o];
+    const p = result.params;
+    const held = tl.held[o];
+    const local = p.mightModel === 'frontier' ? localCount(picked, o) : null;
+    const might = currentMight(p.mightModel, civ.baseMight, held, p.mightExponent, local);
+    infoOut.swatch.style.background = civColor(civ.id, document.documentElement.dataset.theme === 'dark');
+    infoOut.name.textContent = civName(civ.id);
+    infoOut.t0.textContent = `${civ.t0.toFixed(2)} Gyr`;
+    infoOut.speed.textContent = `${sig(civ.speed)} c`;
+    infoOut.temper.textContent = `${civ.temper.toFixed(2)} · ${temperamentWord(civ.temper)}`;
+    infoOut.base.textContent = sig(civ.baseMight);
+    infoOut.model.textContent = `might now (${p.mightModel})`;
+    infoOut.might.textContent = mightText(p.mightModel, civ.baseMight, might, local);
+    infoOut.held.textContent = `${held.toLocaleString('en-US')} ${held === 1 ? 'galaxy' : 'galaxies'}`;
+  }
+
+  function closeInfo() {
+    picked = -1;
+    info.hidden = true;
+  }
+  $('.g-info-close').addEventListener('click', closeInfo);
+
+  // A tap (or click) on the canvas picks a galaxy; drags rotate/pan as before. Multi-touch is never a tap.
+  const downs = new Map<number, { x: number; y: number; t: number }>();
+  let multi = false;
+  const canvas = renderer.canvas;
+  canvas.addEventListener('pointerdown', (e) => {
+    downs.set(e.pointerId, { x: e.clientX, y: e.clientY, t: performance.now() });
+    if (downs.size > 1) multi = true;
+  });
+  const up = (e: PointerEvent) => {
+    const d = downs.get(e.pointerId);
+    downs.delete(e.pointerId);
+    const wasMulti = multi;
+    if (downs.size === 0) multi = false;
+    if (!d || wasMulti || e.type === 'pointercancel' || e.button > 0) return;
+    if (!isTap(e.clientX - d.x, e.clientY - d.y, performance.now() - d.t)) return;
+    const g = renderer.pick(e.clientX, e.clientY, PICK_RADIUS_PX);
+    if (g < 0) return closeInfo();
+    picked = g;
+    showInfo();
+  };
+  canvas.addEventListener('pointerup', up);
+  canvas.addEventListener('pointercancel', up);
+
   // ---------- theme ----------
   new MutationObserver(() => {
     renderer.applyTheme();
     if (tl) renderer.update(tl, true);
+    showInfo();
   }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
   writeForm();

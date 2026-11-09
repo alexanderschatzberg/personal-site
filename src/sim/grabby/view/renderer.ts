@@ -9,6 +9,8 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { SimResult, Timeline } from '../types';
 import { BorderSet, SEGMENT_FRACTION, slotFrame, slotSegment, type Space } from './borders';
 import { civColor } from './palette';
+import { MAX_PIXEL_RATIO } from './phone';
+import { nearestOnScreen } from './pick';
 import { updateRanges } from './ranges';
 
 const css = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -211,12 +213,14 @@ export class Renderer {
   private frame = 0;
   private extent = 1; // half-size of what the ortho camera must fit at s = 1
   private cleanup: (() => void)[] = [];
+  /** Screen positions for picking, reused between taps. */
+  private screenXY = new Float32Array(0);
   /** Called after each rendered frame, e.g. to refresh the scale bar. */
   onView?: () => void;
 
   constructor(private container: HTMLElement, private reducedMotion: boolean) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO));
     this.renderer.domElement.setAttribute('aria-hidden', 'true');
     container.appendChild(this.renderer.domElement);
     this.material = new THREE.PointsMaterial({ size: 3, sizeAttenuation: false, vertexColors: true, map: dotTexture(), alphaTest: 0.5 });
@@ -376,6 +380,51 @@ export class Renderer {
     this.bordersOn = on;
     this.borders?.setVisible(on);
     this.request();
+  }
+
+  /** The canvas, for pointer listeners (e.g. tap to pick). */
+  get canvas(): HTMLCanvasElement {
+    return this.renderer.domElement;
+  }
+
+  /**
+   * Galaxy nearest to a viewport point within maxPx CSS px, or -1. Projects every galaxy to the
+   * screen; points behind the camera, off screen or on the far side of the globe are skipped.
+   */
+  pick(clientX: number, clientY: number, maxPx: number): number {
+    const r = this.result;
+    if (!r || !this.points) return -1;
+    const pos = r.positions;
+    const n = pos.length / 3;
+    if (this.screenXY.length !== n * 2) this.screenXY = new Float32Array(n * 2);
+    const xy = this.screenXY;
+    this.scene.updateMatrixWorld();
+    this.camera.updateMatrixWorld();
+    const world = this.content.matrixWorld.elements;
+    const clip = new THREE.Matrix4().multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse).multiply(this.content.matrixWorld).elements;
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const globe = !!this.occluder;
+    const cam = this.camera.position;
+    for (let i = 0; i < n; i++) {
+      const x = pos[3 * i], y = pos[3 * i + 1], z = pos[3 * i + 2];
+      xy[2 * i] = xy[2 * i + 1] = NaN;
+      if (globe) {
+        // World position p on a sphere centred at the origin: visible when the camera is on the
+        // outer side of the tangent plane at p, i.e. p · (cam − p) > 0.
+        const px = world[0] * x + world[4] * y + world[8] * z + world[12];
+        const py = world[1] * x + world[5] * y + world[9] * z + world[13];
+        const pz = world[2] * x + world[6] * y + world[10] * z + world[14];
+        if (px * (cam.x - px) + py * (cam.y - py) + pz * (cam.z - pz) <= 0) continue;
+      }
+      const w = clip[3] * x + clip[7] * y + clip[11] * z + clip[15];
+      if (!(w > 0)) continue;
+      const nx = (clip[0] * x + clip[4] * y + clip[8] * z + clip[12]) / w;
+      const ny = (clip[1] * x + clip[5] * y + clip[9] * z + clip[13]) / w;
+      if (nx < -1 || nx > 1 || ny < -1 || ny > 1) continue;
+      xy[2 * i] = rect.left + ((nx + 1) / 2) * rect.width;
+      xy[2 * i + 1] = rect.top + ((1 - ny) / 2) * rect.height;
+    }
+    return nearestOnScreen(xy, clientX, clientY, maxPx);
   }
 
   /** Rendered world units per CSS pixel at the view's focus (the controls' target). */
