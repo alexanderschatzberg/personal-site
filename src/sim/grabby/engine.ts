@@ -5,6 +5,7 @@
 import { makeCosmology } from './cosmology';
 import { Space } from './geometry';
 import { makeRng, normal } from './rng';
+import { applyCosmicWeb } from './structure';
 import { DEFAULTS, RANGES, REAL_GALAXIES } from './types';
 import type { Civ, CivEvent, OwnershipEvent, Params, SimResult } from './types';
 
@@ -131,6 +132,10 @@ export function simulate(input: Partial<Params>): SimResult {
     }
   }
 
+  // Cosmic web (round 4): displaces the uniform draw; uses its own RNG stream, so the main
+  // stream continues identically at every clumpiness. clumpiness 0 leaves it untouched.
+  applyCosmicWeb(positions, p);
+
   // 4–5. Metric and neighbour graph.
   const space = new Space(positions, p.dim, p.geometry, p.sizeGly);
   const graph = space.neighbours(p.dim === 3 ? 12 : 8);
@@ -183,7 +188,7 @@ export function simulate(input: Partial<Params>): SimResult {
   // the metric, the count is exactly the civ's held count, so use that instead: O(1), same result.
   const frontierAll = p.frontierRadiusGly >= space.maxDist * (1 + 1e-12);
   /** Arrivals that would land after tEnd (civ, target, source). Never processed; only checked
-   *  at the end to tell "lifetime reached" from "nothing more reachable". */
+   *  at the end to tell "safety cap reached" from "nothing more reachable". */
   const lateA: number[] = [];
   const lateG: number[] = [];
   const lateS: number[] = [];
@@ -224,7 +229,7 @@ export function simulate(input: Partial<Params>): SimResult {
       }
     } else {
       // Solve η(t_arr) = η(t) + d / v. Beyond η(∞) the target is past the event horizon and
-      // can never be reached; beyond η(tEnd) it would only be reached after the lifetime.
+      // can never be reached; beyond η(tEnd) it would only be reached after the safety cap.
       const etaSend = cosmo.eta(t);
       for (let e = graph.start[g]; e < graph.start[g + 1]; e++) {
         const etaArr = etaSend + graph.w[e] / speed;
@@ -311,31 +316,32 @@ export function simulate(input: Partial<Params>): SimResult {
     }
   }
 
-  // Did the lifetime cut anything short? An arrival after tEnd matters if it would still do
+  // Did the safety cap (tEndGyr) cut anything short? An arrival after tEnd matters if it would still do
   // something: its front is intact, its target is not the civ's own, and it would colonize,
   // meet, or fight a battle that has not happened yet.
-  let cutByLifetime = false;
-  for (let k = 0; k < lateA.length && !cutByLifetime; k++) {
+  let cutByCap = false;
+  for (let k = 0; k < lateA.length && !cutByCap; k++) {
     const A = lateA[k], g = lateG[k], s = lateS[k];
     if (owner[s] !== A) continue;
     const B = owner[g];
     if (B === A) continue;
     if (B === -1) {
-      cutByLifetime = true;
+      cutByCap = true;
       continue;
     }
     const war = stance.get(pairKey(A, B));
-    if (war === undefined || (war && !battles.has((A * n + g) * n + s))) cutByLifetime = true;
+    if (war === undefined || (war && !battles.has((A * n + g) * n + s))) cutByCap = true;
   }
 
+  const tEndRun = cutByCap ? p.tEndGyr : tLast;
   return {
     params: p,
     positions,
     civs,
     events,
     log,
-    tLast: cutByLifetime ? p.tEndGyr : tLast,
-    scale: cosmo.scale,
+    tLast: tEndRun,
+    scale: cosmo.scaleOver(tEndRun),
     edges,
     tToday: cosmo.tToday,
   };

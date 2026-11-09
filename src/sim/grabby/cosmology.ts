@@ -23,6 +23,15 @@ export interface Cosmology {
   /** a(t) at SCALE_SAMPLES evenly spaced times over [0, tEnd] inclusive. Double precision:
    *  a(t) passes Float32's max (≈3.4e38) for some in-range params (e.g. H0 = 150, tEnd = 1000). */
   readonly scale: Float64Array;
+  /** a(t) at SCALE_SAMPLES evenly spaced times over [0, tMax] inclusive (sample i at
+   *  t = i·tMax/(SCALE_SAMPLES − 1)); all a(0) when tMax = 0. SimResult.scale uses tMax = tLast. */
+  scaleOver(tMax: number): Float64Array;
+}
+
+function sampleScale(a: (t: number) => number, tMax: number): Float64Array {
+  const out = new Float64Array(SCALE_SAMPLES);
+  for (let i = 0; i < SCALE_SAMPLES; i++) out[i] = a((i * tMax) / (SCALE_SAMPLES - 1));
+  return out;
 }
 
 /**
@@ -111,10 +120,10 @@ export function makeCosmology(H0: number, omegaLambda: number, tEnd: number): Co
     etaInf = etaEnd + sum * dt;
   }
 
-  const scale = new Float64Array(SCALE_SAMPLES);
-  for (let i = 0; i < SCALE_SAMPLES; i++) scale[i] = a((i * tEnd) / (SCALE_SAMPLES - 1));
+  const scale = sampleScale(a, tEnd);
+  const scaleOver = (tMax: number) => sampleScale(a, tMax);
 
-  return { isStatic: false, a, eta, etaInv, etaEnd, etaInf, tToday, scale };
+  return { isStatic: false, a, eta, etaInv, etaEnd, etaInf, tToday, scale, scaleOver };
 }
 
 function staticCosmology(tEnd: number): Cosmology {
@@ -127,5 +136,6 @@ function staticCosmology(tEnd: number): Cosmology {
     etaInf: Infinity,
     tToday: TODAY_GYR,
     scale: new Float64Array(SCALE_SAMPLES).fill(1),
+    scaleOver: () => new Float64Array(SCALE_SAMPLES).fill(1),
   };
 }

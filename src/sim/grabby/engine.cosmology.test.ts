@@ -40,13 +40,26 @@ describe('SimResult cosmology fields', () => {
     const c = makeCosmology(DEFAULTS.H0, DEFAULTS.omegaLambda, DEFAULTS.tEndGyr);
     expect(r.scale).toBeInstanceOf(Float64Array);
     expect(r.scale.length).toBe(SCALE_SAMPLES);
-    expect(Array.from(r.scale)).toEqual(Array.from(c.scale));
+    // Round 4: sampled over [0, tLast], not [0, tEnd].
+    expect(r.tLast).toBeGreaterThan(0);
+    expect(r.tLast).toBeLessThan(r.params.tEndGyr);
+    for (let i = 0; i < SCALE_SAMPLES; i++) {
+      expect(r.scale[i]).toBe(c.a((i * r.tLast) / (SCALE_SAMPLES - 1)));
+    }
+    expect(r.scale[SCALE_SAMPLES - 1]).toBe(c.a(r.tLast));
     expect(r.tToday).toBe(c.tToday);
     expect(Math.abs(r.tToday! - 13.8)).toBeLessThanOrEqual(0.1);
 
     const s = simulate({ H0: 0 });
     expect(s.tToday).toBe(TODAY_GYR);
     expect(Array.from(s.scale).every((x) => x === 1)).toBe(true);
+
+    // No civ ever arises: tLast = 0 and every sample is a(0).
+    const empty = simulate({ pLife: 1e-30, galaxies: 500 });
+    expect(empty.civs.length).toBe(0);
+    expect(empty.tLast).toBe(0);
+    expect(empty.scale.length).toBe(SCALE_SAMPLES);
+    expect(Array.from(empty.scale).every((x) => x === c.a(0))).toBe(true);
   });
 
   it('edges are the symmetrised kNN graph, i < j, each pair once', () => {
@@ -210,6 +223,63 @@ describe('the run ends when nothing more can be reached', () => {
     expect(r.civs.length).toBeGreaterThan(0);
     expect(r.tLast).toBe(r.params.tEndGyr);
   });
+});
+
+describe('round 4: the run ends at the last event; tEndGyr is only a safety cap (criterion 27)', () => {
+  it('static, with the default web: every galaxy is settled, well before the cap', () => {
+    const report: Record<string, { civs: number; tLast: number }> = {};
+    for (const seed of SEEDS) {
+      const r = simulate({ H0: 0, seed });
+      expect(r.params.clumpiness).toBe(DEFAULTS.clumpiness);
+      expect(r.civs.length).toBeGreaterThan(0);
+      const owner = new Int32Array(r.params.galaxies).fill(-1);
+      for (const e of r.events) owner[e.galaxy] = e.owner;
+      expect(owner.every((o) => o >= 0)).toBe(true);
+      expect(r.tLast).toBe(lastEventTime(r));
+      expect(r.tLast).toBeLessThan(r.params.tEndGyr);
+      report[seed] = { civs: r.civs.length, tLast: r.tLast };
+    }
+    console.log('static defaults (civs, tLast):', JSON.stringify(report));
+  });
+
+  it('raising the cap changes nothing when the run ended on its own', () => {
+    for (const seed of ['a', 'b']) {
+      for (const extra of [{ H0: 0 }, { H0: 0, dim: 3 as const, galaxies: 3000, sizeGly: 50 }]) {
+        const r = simulate({ ...extra, seed });
+        const big = simulate({ ...extra, seed, tEndGyr: 10000 });
+        expect(r.tLast).toBeLessThan(r.params.tEndGyr);
+        expect(big.events).toEqual(r.events);
+        expect(big.log).toEqual(r.log);
+        expect(big.tLast).toBe(r.tLast);
+      }
+    }
+  });
+
+  it('with expansion the neighbour graph is connected at the defaults, so only the horizon stops fronts', () => {
+    for (const p of [{}, { geometry: 'sphere' as const }, { geometry: 'torus' as const }, { clumpiness: 1 }]) {
+      const r = simulate({ ...p, pLife: 1e-30 });
+      const n = r.params.galaxies;
+      const parent = Int32Array.from({ length: n }, (_, i) => i);
+      const find = (x: number): number => (parent[x] === x ? x : (parent[x] = find(parent[x])));
+      let comps = n;
+      for (let k = 0; k < r.edges.length; k += 2) {
+        const a = find(r.edges[k]), b = find(r.edges[k + 1]);
+        if (a !== b) {
+          parent[a] = b;
+          comps--;
+        }
+      }
+      expect(comps).toBe(1);
+    }
+  });
+
+  it('50k galaxies in 2d with the default web finishes in under ~3 s', () => {
+    const t0 = performance.now();
+    const r = simulate({ galaxies: 50000 });
+    const ms = performance.now() - t0;
+    console.log(`50k 2d (clumpiness ${r.params.clumpiness}): ${ms.toFixed(0)} ms, ${r.civs.length} civs`);
+    expect(ms).toBeLessThan(3000);
+  }, 20000);
 });
 
 describe('frontier performance', () => {
