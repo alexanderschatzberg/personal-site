@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import type { SimResult, Timeline } from '../types';
 import { civColor } from './palette';
+import { updateRanges } from './ranges';
 
 const css = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 const isDark = () => document.documentElement.dataset.theme === 'dark';
@@ -94,7 +95,8 @@ export class Renderer {
     this.colors = new Float32Array(n * 3);
     geo.setAttribute('color', new THREE.BufferAttribute(this.colors, 3));
     // Fewer, bigger dots for small runs; smaller dots when there are many.
-    this.material.size = Math.max(1.5, Math.min(4, 3 * Math.sqrt(4000 / n))) * this.renderer.getPixelRatio();
+    // CSS pixels: three already multiplies point size by the renderer's pixel ratio.
+    this.material.size = Math.max(1.5, Math.min(4, 3 * Math.sqrt(4000 / n)));
     this.points = new THREE.Points(geo, this.material);
     this.group.add(this.points);
     this.group.quaternion.identity();
@@ -147,9 +149,15 @@ export class Renderer {
       c[g * 3 + 1] = col.g;
       c[g * 3 + 2] = col.b;
     };
+    const attr = this.points.geometry.getAttribute('color') as THREE.BufferAttribute;
+    const ranges = full ? null : updateRanges(tl.changed, tl.changedCount, tl.owner.length, 3);
+    if (ranges && ranges.length === 0) return;
     if (full) for (let g = 0; g < tl.owner.length; g++) paint(g);
     else for (let k = 0; k < tl.changedCount; k++) paint(tl.changed[k]);
-    (this.points.geometry.getAttribute('color') as THREE.BufferAttribute).needsUpdate = true;
+    attr.clearUpdateRanges();
+    // null = full upload (no ranges); otherwise upload only the changed stretches.
+    if (ranges) for (const r of ranges) attr.addUpdateRange(r.start, r.count);
+    attr.needsUpdate = true;
     this.request();
   }
 
