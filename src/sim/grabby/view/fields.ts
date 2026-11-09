@@ -4,8 +4,14 @@ import { RANGES } from '../types';
 
 export type NumKey = keyof typeof RANGES;
 
+/** Tabs of the phone bottom sheet. The desktop drawer shows every group at once. */
+export const TABS = ['space', 'life', 'war', 'cosmos'] as const;
+export type Tab = (typeof TABS)[number];
+
 export interface NumField {
   key: NumKey;
+  /** Phone sheet tab. */
+  group: Tab;
   label: string;
   unit?: string;
   /** The value always lives in a number box: a range input would snap it to its step. */
@@ -19,24 +25,24 @@ export interface NumField {
 }
 
 export const FIELDS: NumField[] = [
-  { key: 'sizeGly', label: 'size', unit: 'Gly', input: 'number', slider: 1 },
-  { key: 'galaxies', label: 'galaxies', input: 'number', slider: 500 },
-  { key: 'pLife', label: 'p(life) / planet', input: 'number' },
-  { key: 'planetsPerGalaxy', label: 'planets / galaxy', input: 'number' },
-  { key: 'hardSteps', label: 'hard steps', input: 'number' },
-  { key: 'lifeWindowGyr', label: 'life window', unit: 'Gyr', input: 'number', note: 'civilizations can only arise before this' },
-  { key: 'speedMin', label: 'speed min', unit: 'c', input: 'number' },
-  { key: 'speedMax', label: 'speed max', unit: 'c', input: 'number' },
-  { key: 'temperMean', label: 'temperament', input: 'number', slider: 0.01, note: '0 peaceful · 1 aggressive' },
-  { key: 'temperSpread', label: 'temper spread', input: 'number' },
-  { key: 'mightMin', label: 'base might min', input: 'number' },
-  { key: 'mightMax', label: 'base might max', input: 'number' },
-  { key: 'mightExponent', label: 'α (N^α)', input: 'number', model: 'power' },
-  { key: 'frontierRadiusGly', label: 'frontier radius', unit: 'Gly', input: 'number', model: 'frontier' },
-  { key: 'defenderBonus', label: 'defender bonus', unit: '×', input: 'number' },
-  { key: 'tEndGyr', label: 'lifetime', unit: 'Gyr', input: 'number', note: 'upper cap; the run ends earlier once nothing more can be reached' },
-  { key: 'H0', label: 'H0', unit: 'km/s/Mpc', input: 'number', note: '0 = no expansion' },
-  { key: 'omegaLambda', label: 'ΩΛ', input: 'number', note: 'dark energy; matter = 1 − ΩΛ' },
+  { key: 'sizeGly', group: 'space', label: 'size', unit: 'Gly', input: 'number', slider: 1 },
+  { key: 'galaxies', group: 'space', label: 'galaxies', input: 'number', slider: 500 },
+  { key: 'pLife', group: 'life', label: 'p(life) / planet', input: 'number' },
+  { key: 'planetsPerGalaxy', group: 'life', label: 'planets / galaxy', input: 'number' },
+  { key: 'hardSteps', group: 'life', label: 'hard steps', input: 'number' },
+  { key: 'lifeWindowGyr', group: 'life', label: 'life window', unit: 'Gyr', input: 'number', note: 'civilizations can only arise before this' },
+  { key: 'speedMin', group: 'life', label: 'speed min', unit: 'c', input: 'number' },
+  { key: 'speedMax', group: 'life', label: 'speed max', unit: 'c', input: 'number' },
+  { key: 'temperMean', group: 'war', label: 'temperament', input: 'number', slider: 0.01, note: '0 peaceful · 1 aggressive' },
+  { key: 'temperSpread', group: 'war', label: 'temper spread', input: 'number' },
+  { key: 'mightMin', group: 'war', label: 'base might min', input: 'number' },
+  { key: 'mightMax', group: 'war', label: 'base might max', input: 'number' },
+  { key: 'mightExponent', group: 'war', label: 'α (N^α)', input: 'number', model: 'power' },
+  { key: 'frontierRadiusGly', group: 'war', label: 'frontier radius', unit: 'Gly', input: 'number', model: 'frontier' },
+  { key: 'defenderBonus', group: 'war', label: 'defender bonus', unit: '×', input: 'number' },
+  { key: 'tEndGyr', group: 'cosmos', label: 'lifetime', unit: 'Gyr', input: 'number', note: 'upper cap; the run ends earlier once nothing more can be reached' },
+  { key: 'H0', group: 'cosmos', label: 'H0', unit: 'km/s/Mpc', input: 'number', note: '0 = no expansion' },
+  { key: 'omegaLambda', group: 'cosmos', label: 'ΩΛ', input: 'number', note: 'dark energy; matter = 1 − ΩΛ' },
 ];
 
 /** Compact number for labels only: 1e-22, 1e+11 → 1e11, 4,000, 0.6. Lossy; never use for values. */

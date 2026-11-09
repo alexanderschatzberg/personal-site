@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { RANGES } from '../types';
-import { FIELDS, fromInput, toInput } from './fields';
+import { FIELDS, fromInput, TABS, toInput } from './fields';
 
 describe('drawer fields', () => {
   it('covers every RANGES key exactly once, including H0 and omegaLambda', () => {
@@ -36,5 +36,20 @@ describe('drawer fields', () => {
   it('fromInput rejects blanks and non-finite text', () => {
     for (const s of ['', '  ', 'abc', 'Infinity', 'NaN', '1e999']) expect(fromInput(s), s).toBeNull();
     expect(fromInput(' 1e-22 ')).toBe(1e-22);
+  });
+});
+
+describe('phone sheet tabs', () => {
+  it('groups every field into space · life · war · cosmos, each tab non-empty', () => {
+    expect(TABS).toEqual(['space', 'life', 'war', 'cosmos']);
+    for (const f of FIELDS) expect(TABS, f.key).toContain(f.group);
+    for (const t of TABS) expect(FIELDS.some((f) => f.group === t), t).toBe(true);
+  });
+
+  it('puts the might-model fields with war and the expansion fields with cosmos', () => {
+    const group = (k: string) => FIELDS.find((f) => f.key === k)!.group;
+    for (const k of ['mightExponent', 'frontierRadiusGly', 'temperMean', 'defenderBonus']) expect(group(k), k).toBe('war');
+    for (const k of ['H0', 'omegaLambda', 'tEndGyr']) expect(group(k), k).toBe('cosmos');
+    for (const k of ['sizeGly', 'galaxies']) expect(group(k), k).toBe('space');
   });
 });
