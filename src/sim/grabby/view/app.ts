@@ -4,7 +4,7 @@ import { Space } from '../geometry';
 import { createTimeline } from '../timeline';
 import { DEFAULTS, RANGES, type Params, type SimResult, type Timeline } from '../types';
 import type { WorkerRequest, WorkerResponse } from '../worker';
-import { civName, currentMight, mightText, temperamentWord } from './civinfo';
+import { civName, currentMight, mightText, reuseLocalCount, temperamentWord, type LocalCountCache } from './civinfo';
 import { FIELDS, fmt, fromInput, TABS, toInput, type Tab } from './fields';
 import { displayScale, physicalPerRendered, scaleAt } from './growth';
 import { advance, endStatus, nextSpeed, span, SPEEDS, step } from './playback';
@@ -177,7 +177,7 @@ export function mount(root: HTMLElement) {
     if (playing && !document.hidden) {
       lastFrame = performance.now();
       raf = requestAnimationFrame(tick);
-    }
+    } else showInfo(); // stopped: replace a throttled frontier count with the exact one
   }
 
   function tick(now: number) {
@@ -490,10 +490,19 @@ export function mount(root: HTMLElement) {
   };
   let picked = -1;
   let space: Space | undefined;
+  /** Last frontier count on the card; reused for a few frames during playback. */
+  let counted: LocalCountCache | null = null;
   const sig = (v: number) => fmt(Number(v.toPrecision(3)));
 
-  /** Own galaxies within the frontier radius of g (the engine's frontier count). */
+  /** Own galaxies within the frontier radius of g (the engine's frontier count), throttled during playback. */
   function localCount(g: number, civ: number): number {
+    const now = performance.now();
+    if (reuseLocalCount(counted, g, civ, now, playing)) return counted!.count;
+    counted = { g, civ, at: now, count: countWithin(g, civ) };
+    return counted.count;
+  }
+
+  function countWithin(g: number, civ: number): number {
     const r = result!;
     space ??= new Space(r.positions, r.params.dim, r.params.geometry, r.params.sizeGly);
     if (r.params.frontierRadiusGly >= space.maxDist * (1 + 1e-12)) return tl!.held[civ];
@@ -528,6 +537,7 @@ export function mount(root: HTMLElement) {
 
   function closeInfo() {
     picked = -1;
+    counted = null;
     info.hidden = true;
   }
   $('.g-info-close').addEventListener('click', closeInfo);

@@ -37,3 +37,23 @@ export function mightText(model: MightModel, base: number, might: number | null,
   if (model === 'frontier' && local !== null) return `${sig(base)} × ${Math.max(1, local)} = ${sig(might)}`;
   return sig(might);
 }
+
+/** During playback the card's frontier count (O(galaxies) when the radius is large) is redone at most this often. */
+export const LOCAL_COUNT_THROTTLE_MS = 250;
+
+/** The last frontier count shown: galaxy g owned by civ, counted at time `at` (ms). */
+export interface LocalCountCache {
+  g: number;
+  civ: number;
+  at: number;
+  count: number;
+}
+
+/**
+ * Show the cached frontier count instead of recounting? Only while playing, for the same
+ * galaxy and owner, within LOCAL_COUNT_THROTTLE_MS. A paused seek, a new pick or a change of
+ * owner always recounts.
+ */
+export function reuseLocalCount(cache: LocalCountCache | null, g: number, civ: number, now: number, playing: boolean): boolean {
+  return !!cache && playing && cache.g === g && cache.civ === civ && now - cache.at < LOCAL_COUNT_THROTTLE_MS;
+}
