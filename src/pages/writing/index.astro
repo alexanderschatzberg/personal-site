@@ -1,0 +1,15 @@
+---
+import Base from '../../layouts/Base.astro';
+import EssayCard from '../../components/EssayCard.astro';
+import { getEssays } from '../../lib';
+
+const essays = await getEssays();
+---
+<Base title="Writing" path="writing">
+  <h1 class="page-title">Writing</h1>
+  <div class="essay-list">
+    {essays.length
+      ? essays.map((e) => <EssayCard essay={e} />)
+      : <p class="muted">Nothing here yet.</p>}
+  </div>
+</Base>

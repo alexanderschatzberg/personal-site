@@ -1,0 +1,54 @@
+---
+// Holds a three.js demo from src/demos/<name>.ts. Shows the poster image
+// first, and only downloads the demo code (and three.js) when it nears the screen.
+interface Props {
+  name: string;
+  poster?: string;
+  alt?: string;
+}
+const { name, poster, alt = '' } = Astro.props;
+
+const available = Object.keys(import.meta.glob('../demos/*.ts')).map((p) => p.split('/').pop()!.replace(/\.ts$/, ''));
+if (!available.includes(name)) {
+  throw new Error(`Demo "${name}" not found. Add src/demos/${name}.ts (available: ${available.join(', ') || 'none'}).`);
+}
+---
+<div class="demo" data-demo={name}>
+  {poster
+    ? <img class="demo-poster" src={poster} alt={alt} />
+    : <div class="demo-poster image-placeholder" aria-hidden="true">[demo]</div>}
+  <noscript><p class="demo-note">This demo needs JavaScript.</p></noscript>
+</div>
+
+<script>
+  const loaders = import.meta.glob<{ default: (el: HTMLElement) => () => void }>('../demos/*.ts');
+
+  const observer = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        observer.unobserve(entry.target);
+        start(entry.target as HTMLElement);
+      }
+    },
+    { rootMargin: '200px' },
+  );
+
+  async function start(el: HTMLElement) {
+    const load = loaders[`../demos/${el.dataset.demo}.ts`];
+    if (!load) return;
+    el.classList.add('is-loading');
+    try {
+      const mod = await load();
+      mod.default(el);
+      el.classList.add('is-running');
+    } catch (err) {
+      console.error(err);
+      el.classList.add('has-error');
+    } finally {
+      el.classList.remove('is-loading');
+    }
+  }
+
+  document.querySelectorAll<HTMLElement>('.demo[data-demo]').forEach((el) => observer.observe(el));
+</script>

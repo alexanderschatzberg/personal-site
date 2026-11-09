@@ -1,0 +1,23 @@
+{
+  "name": "personal-site",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "start": "serve dist --config ../serve.json --no-port-switching --listen tcp://0.0.0.0:${PORT:-3000}"
+  },
+  "dependencies": {
+    "astro": "^7.4.7",
+    "serve": "^14.2.7",
+    "three": "^0.187.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.187.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

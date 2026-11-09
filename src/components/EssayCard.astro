@@ -1,0 +1,15 @@
+---
+import type { CollectionEntry } from 'astro:content';
+import { formatDate } from '../lib';
+
+interface Props { essay: CollectionEntry<'writing'> }
+const { essay } = Astro.props;
+const { title, subtitle, date, draft } = essay.data;
+---
+<a class="essay-card" href={`/writing/${essay.id}/`}>
+  <span class="essay-card-text">
+    <span class="essay-card-title">{title}{draft && <span class="draft-tag"> [draft]</span>}</span>
+    {subtitle && <span class="essay-card-subtitle">{subtitle}</span>}
+  </span>
+  <time datetime={date.toISOString()}>{formatDate(date)}</time>
+</a>

@@ -1,0 +1,42 @@
+---
+import Base from '../layouts/Base.astro';
+import { SITE } from '../site';
+import { getEssays, getProjects, formatDate, projectHref } from '../lib';
+
+const essays = (await getEssays()).slice(0, 3);
+const projects = (await getProjects()).slice(0, 3);
+---
+<Base>
+  <div class="home-grid">
+    <span class="label">now</span>
+    <p class="intro">[A few lines about who you are and what you're working on right now.]</p>
+
+    <span class="label">writing</span>
+    <ul class="plain-list">
+      {essays.map((e) => (
+        <li class="row">
+          <span class="muted nowrap">{formatDate(e.data.date)}</span>
+          <a class="underline" href={`/writing/${e.id}/`}>{e.data.title}</a>
+        </li>
+      ))}
+      <li class="more"><a href="/writing/">all writing →</a></li>
+    </ul>
+
+    <span class="label">projects</span>
+    <ul class="plain-list">
+      {projects.map((p) => (
+        <li class="row wrap">
+          <a class="underline" href={projectHref(p) ?? '/projects/'}>{p.data.title}</a>
+          <span class="muted">{p.data.description}</span>
+        </li>
+      ))}
+      <li class="more"><a href="/projects/">all projects →</a></li>
+    </ul>
+
+    <span class="label">elsewhere</span>
+    <div class="row wrap">
+      <a class="underline" href={`mailto:${SITE.email}`}>email</a>
+      {SITE.links.map((l) => <a class="underline" href={l.href}>{l.label}</a>)}
+    </div>
+  </div>
+</Base>
