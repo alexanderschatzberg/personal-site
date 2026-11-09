@@ -6,7 +6,7 @@ import { DEFAULTS, RANGES, type Params, type SimResult, type Timeline } from '..
 import type { WorkerRequest, WorkerResponse } from '../worker';
 import { civName, currentMight, mightText, reuseLocalCount, temperamentWord, type LocalCountCache } from './civinfo';
 import { FIELDS, fmt, fromInput, TABS, toInput, type Tab } from './fields';
-import { displayScale, formatA, physicalPerRendered, scaleAt } from './growth';
+import { displayScale, formatA, physicalPerRendered, runScaleAt } from './growth';
 import { advance, endStatus, nextSpeed, span, SPEEDS, step } from './playback';
 import { LANDSCAPE_MQ, PORTRAIT_MQ, type Layout } from './layout';
 import { civColor } from './palette';
@@ -53,7 +53,7 @@ export function mount(root: HTMLElement) {
   let t = 0;
   let tSpan = 0; // playable span: 0 .. tLast
   let a = 1; // scale factor at t
-  let s = 1; // displayed scale at t
+  let s = 1; // display scale d(t) = min(a, 1)
   let playing = false;
   let speed = 0;
   let lastFrame = 0;
@@ -139,7 +139,7 @@ export function mount(root: HTMLElement) {
   /** Scale the drawn universe for time t, and refresh the a(t) readout. */
   function grow() {
     if (!result) return;
-    a = scaleAt(result.scale, result.params.tEndGyr, t);
+    a = runScaleAt(result, t);
     s = displayScale(a, result.params.H0);
     out.a.textContent = `a = ${formatA(a)}`;
     renderer.setScale(s);
