@@ -215,3 +215,18 @@ This unit **owns** `src/pages/projects/grabby-aliens.astro`, `src/sim/grabby/vie
 ## Waves (round 2)
 
 U3 and U4 run in parallel in fresh worktrees off pm/grabby-aliens. Merge U3, then U4. Gate: `npm test && npm run build`. Then one fresh reviewer on the round 2 diff.
+
+## Round 2 addendum: the run ends when nothing more can be reached
+
+The user wants the simulation to end once no more galaxies can be reached.
+
+- **U3 (engine):**
+  - The run ends when the queue is empty: no pending arrival can land before tEnd, which includes fronts stopped by the event horizon, and no pending arise remains.
+  - Pending `arise` candidates whose galaxy is already owned should be dropped as soon as their galaxy is taken, or skipped cheaply. Either way they must not keep the run "alive" artificially. (An arise on a still-unowned galaxy is a real possible event and counts.)
+  - Set `tLast` to the time of the final event when the queue emptied before tEnd, and to tEnd otherwise.
+  - Add a test: with expansion on and the defaults, tLast < tEndGyr whenever the queue empties. Also a tiny case where everything is claimed early and tLast is that time.
+- **U4 (view):**
+  - The scrubber and playback span 0 to `tLast`, not tEnd.
+  - At the end, playback stops, and the readout shows `ended · no more galaxies reachable` (or `ended · lifetime reached` when tLast = tEnd).
+  - The lifetime field stays as an upper cap.
+  - The 1× playback speed is based on the span to tLast.
