@@ -1,0 +1,74 @@
+{
+  "defaults_5eed": {
+    "events": "e3814367b0ac271ac2991d6e7a88d712ef6585d4b2d5d5d02d67b05a85f0536c",
+    "log": "2fa3dee256f90a9e19d09d0873d0fc750b0cd69c02cda10adf8d201dc18fe2f3",
+    "civs": "4e10a0b158dc8583d1b65a78989f3070055da5081fc28f70eda44fc98a5cf3e1",
+    "nEvents": 1777,
+    "nLog": 71,
+    "nCivs": 10
+  },
+  "defaults_a": {
+    "events": "f03f7b1f6ea52bd50d17b82a0eba7bc007ab87b600e26843785e9c420db58ec6",
+    "log": "0351c7f8e8416a4c5b7e3e809119382cedde801df5b4b96508b3a36680588025",
+    "civs": "6205d1af975230f143183f8e5d2407fffaa7f5d2467de11bb5d440334a4b8a15",
+    "nEvents": 4801,
+    "nLog": 1030,
+    "nCivs": 13
+  },
+  "defaults_b": {
+    "events": "ba62871518679d86dbaa03f194b0c5d5b2e3c518b99268e309bc799b16d9a9a9",
+    "log": "d3b1faa4086d8dd56e09cc747a8fe2a7458db6dccdca461ab3f9495091957e84",
+    "civs": "59dea4e8802e670b181a029e2817535761da26ce03297c0824884a47118a25d3",
+    "nEvents": 5400,
+    "nLog": 933,
+    "nCivs": 9
+  },
+  "busy_torus_x": {
+    "events": "e1e0e00feae8bd9d5739988114379fc233c0f3857ef8099d335327010f504134",
+    "log": "8e175bae91c8d4ea95aef5eeafb7670b4fb71048c1ba7558dc80bc7d171c0945",
+    "civs": "f221c7c99518b6db21d969a75a8c8016fa490a6582c5c474f26602ad014c8ea4",
+    "nEvents": 5346,
+    "nLog": 4870,
+    "nCivs": 32
+  },
+  "busy_sphere_y": {
+    "events": "4d1ab04ee7e4bd3a0c2dbb64d212a0b0292a82325c63eb9a23693899870394ac",
+    "log": "27399f42d6776ea704336349c85be8966b1946169ca05ef758c6c6028c27f9fd",
+    "civs": "dc56747445b799067be080480d3d57239f6a59eeb8262cb504cb779971b426c7",
+    "nEvents": 3091,
+    "nLog": 2157,
+    "nCivs": 10
+  },
+  "busy_3d_frontier_z": {
+    "events": "b7f74ddccb41711a46fb51c101bdc9c73487b49d1c38d67caa0984dac6b37937",
+    "log": "7d2337d068b9a49733e41b0663168962350449bfb8af2dbca510cd2eec7f60fd",
+    "civs": "7047bea3a1162b935c48b855132fee0465f76f77408f182168f7f7149c100456",
+    "nEvents": 6322,
+    "nLog": 7806,
+    "nCivs": 49
+  },
+  "busy_flat_log_w": {
+    "events": "6d9693054db4df166acb8740054c3ccbe6ff74a6fadbc89288099b1860b5201e",
+    "log": "6e758879d3de339cadf47cb1cf72a3c82274eed5d9a12307ebbbf251cb9b5a1e",
+    "civs": "5da06d6f7fea083913e178bf5582d37156b23f3a5c3b76e3fefc9c4f852aeb22",
+    "nEvents": 6938,
+    "nLog": 8280,
+    "nCivs": 35
+  },
+  "frontier_whole_v": {
+    "events": "4fc02b142a9308196986186cb20501744a3a70607121a9d8832b2694cb8c069a",
+    "log": "2805c5d36cb6f9dfd6853116fe23522bd90699b1e79446f52a52cd5a4f82cbe9",
+    "civs": "53e4279a3742ef6614db6ee11e7b2d02be0f6a2050ae3e1fc216b35b56d67331",
+    "nEvents": 2726,
+    "nLog": 765,
+    "nCivs": 5
+  },
+  "frontier_sphere_u": {
+    "events": "0a2a89f21f58729ca15a3a549d6b80df60845a6fab2e80898d73cb07c6e43817",
+    "log": "a512b362e0677cdc3c0857faedad364bad06447278071272bdffef1c05976cb5",
+    "civs": "e25429bd02f15387dfb5e9b0c985e591e0507f787cfbbca5ff45300b81e3b429",
+    "nEvents": 2806,
+    "nLog": 937,
+    "nCivs": 10
+  }
+}

@@ -2,6 +2,7 @@
 // along a k-nearest-neighbour graph with first-contact stances and battles.
 // Browser-safe: runs in a Web Worker.
 
+import { makeCosmology } from './cosmology';
 import { Space } from './geometry';
 import { makeRng, normal } from './rng';
 import { DEFAULTS, RANGES, REAL_GALAXIES } from './types';
@@ -133,6 +134,18 @@ export function simulate(input: Partial<Params>): SimResult {
   // 4–5. Metric and neighbour graph.
   const space = new Space(positions, p.dim, p.geometry, p.sizeGly);
   const graph = space.neighbours(p.dim === 3 ? 12 : 8);
+  const edgeList: number[] = [];
+  for (let i = 0; i < n; i++) {
+    for (let e = graph.start[i]; e < graph.start[i + 1]; e++) {
+      const j = graph.adj[e];
+      if (i < j) edgeList.push(i, j);
+    }
+  }
+  const edges = Uint32Array.from(edgeList);
+
+  // Expansion. Distances on `positions` are comoving; a front at speed v covers comoving
+  // distance d in conformal time d / v, i.e. dχ/dt = v / a(t).
+  const cosmo = makeCosmology(p.H0, p.omegaLambda, p.tEndGyr);
 
   // 6. Origin candidates.
   const q = 1 - Math.exp((-p.pLife * p.planetsPerGalaxy * REAL_GALAXIES) / n);
@@ -162,6 +175,22 @@ export function simulate(input: Partial<Params>): SimResult {
   const battles = new Set<number>();
   const pairKey = (a: number, b: number) => a * candidates.length + b;
 
+  // Frontier performance: countWithin scans every grid cell within the radius, so a radius
+  // as large as the universe makes each battle O(galaxies) (a 3d, 50k-galaxy, radius-100 run
+  // with early civs took ~190 s). When the radius reaches the largest possible distance under
+  // the metric, the count is exactly the civ's held count, so use that instead: O(1), same result.
+  const frontierAll = p.frontierRadiusGly >= space.maxDist * (1 + 1e-12);
+  /** Arrivals that would land after tEnd (civ, target, source). Never processed; only checked
+   *  at the end to tell "lifetime reached" from "nothing more reachable". */
+  const lateA: number[] = [];
+  const lateG: number[] = [];
+  const lateS: number[] = [];
+  const late = (civ: number, g: number, s: number) => {
+    lateA.push(civ);
+    lateG.push(g);
+    lateS.push(s);
+  };
+
   const might = (civ: number, g: number): number => {
     const base = civs[civ].baseMight;
     const N = held[civ];
@@ -171,6 +200,8 @@ export function simulate(input: Partial<Params>): SimResult {
       case 'log':
         return base * Math.log(1 + N);
       case 'frontier':
+        // When the radius covers the whole universe, every galaxy the civ holds is in range.
+        if (frontierAll) return base * Math.max(1, N);
         return base * Math.max(1, space.countWithin(g, p.frontierRadiusGly, owner, civ));
     }
   };
@@ -182,22 +213,37 @@ export function simulate(input: Partial<Params>): SimResult {
     if (prev >= 0) held[prev]--;
     events.push({ t, galaxy: g, owner: civ, prev, kind });
     const speed = civs[civ].speed;
-    for (let e = graph.start[g]; e < graph.start[g + 1]; e++) {
-      queue.push(t + graph.w[e] / speed, civ, graph.adj[e], g);
+    if (cosmo.isStatic) {
+      // a ≡ 1: the round-1 arithmetic, unchanged.
+      for (let e = graph.start[g]; e < graph.start[g + 1]; e++) {
+        const tArr = t + graph.w[e] / speed;
+        if (tArr > p.tEndGyr) late(civ, graph.adj[e], g);
+        else queue.push(tArr, civ, graph.adj[e], g);
+      }
+    } else {
+      // Solve η(t_arr) = η(t) + d / v. Beyond η(∞) the target is past the event horizon and
+      // can never be reached; beyond η(tEnd) it would only be reached after the lifetime.
+      const etaSend = cosmo.eta(t);
+      for (let e = graph.start[g]; e < graph.start[g + 1]; e++) {
+        const etaArr = etaSend + graph.w[e] / speed;
+        if (etaArr > cosmo.etaInf) continue;
+        if (etaArr > cosmo.etaEnd) {
+          late(civ, graph.adj[e], g);
+          continue;
+        }
+        const tArr = Math.min(p.tEndGyr, Math.max(t, cosmo.etaInv(etaArr)));
+        queue.push(tArr, civ, graph.adj[e], g);
+      }
     }
     return prev;
   };
 
+  // Every queued entry is at or before tEnd, so the queue runs until it is empty. Arises on
+  // already-owned galaxies are skipped on pop and do not count as events.
   let tLast = 0;
-  let ranToEnd = false;
   while (queue.size > 0) {
-    const id = queue.peek();
+    const id = queue.pop();
     const t = queue.t[id];
-    if (t > p.tEndGyr) {
-      ranToEnd = true;
-      break;
-    }
-    queue.pop();
     const g = queue.g[id];
     const s = queue.s[id];
 
@@ -263,12 +309,32 @@ export function simulate(input: Partial<Params>): SimResult {
     }
   }
 
+  // Did the lifetime cut anything short? An arrival after tEnd matters if it would still do
+  // something: its front is intact, its target is not the civ's own, and it would colonize,
+  // meet, or fight a battle that has not happened yet.
+  let cutByLifetime = false;
+  for (let k = 0; k < lateA.length && !cutByLifetime; k++) {
+    const A = lateA[k], g = lateG[k], s = lateS[k];
+    if (owner[s] !== A) continue;
+    const B = owner[g];
+    if (B === A) continue;
+    if (B === -1) {
+      cutByLifetime = true;
+      continue;
+    }
+    const war = stance.get(pairKey(A, B));
+    if (war === undefined || (war && !battles.has((A * n + g) * n + s))) cutByLifetime = true;
+  }
+
   return {
     params: p,
     positions,
     civs,
     events,
     log,
-    tLast: ranToEnd ? p.tEndGyr : tLast,
+    tLast: cutByLifetime ? p.tEndGyr : tLast,
+    scale: cosmo.scale,
+    edges,
+    tToday: cosmo.tToday,
   };
 }
