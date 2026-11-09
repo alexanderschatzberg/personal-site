@@ -1,9 +1,9 @@
 // Page controller: reads params from the URL, runs the worker, drives the timeline,
 // the renderer, the drawer and the time bar.
 import { createTimeline } from '../timeline';
-import { DEFAULTS, RANGES, TODAY_GYR, type Params, type SimResult, type Timeline } from '../types';
+import { DEFAULTS, TODAY_GYR, type Params, type SimResult, type Timeline } from '../types';
 import type { WorkerRequest, WorkerResponse } from '../worker';
-import { FIELDS, fmt, toInput } from './fields';
+import { FIELDS, fromInput, toInput } from './fields';
 import { advance, nextSpeed, SPEEDS, step } from './playback';
 import { Renderer } from './renderer';
 import { clampNum, MAX_SEED_LENGTH, paramsToQuery, queryToParams } from './url';
@@ -214,10 +214,10 @@ export function mount(root: HTMLElement) {
   }
 
   function syncForm() {
-    for (const o of $$<HTMLOutputElement>('output[data-out]')) {
-      const k = o.dataset.out as keyof typeof RANGES;
-      const v = Number(input(k).value);
-      o.value = k === 'temperMean' ? v.toFixed(2) : fmt(v) + (k === 'sizeGly' ? ' Gly' : '');
+    // Sliders only mirror the number boxes; the boxes hold the true value.
+    for (const sl of $$<HTMLInputElement>('input[data-slider]')) {
+      const v = fromInput(input(sl.dataset.slider!).value);
+      if (v !== null) sl.value = String(v);
     }
     const model = input('mightModel').value;
     for (const f of FIELDS) {
@@ -227,15 +227,18 @@ export function mount(root: HTMLElement) {
       input(f.key).closest('.g-field')?.toggleAttribute('data-off', off);
     }
   }
-  form.addEventListener('input', syncForm);
+  form.addEventListener('input', (e) => {
+    const sl = e.target as HTMLInputElement;
+    if (sl.dataset?.slider) input(sl.dataset.slider).value = sl.value;
+    syncForm();
+  });
 
   /** Form values, clamped to RANGES. A blank or invalid box keeps the current value. */
   function readForm(): Partial<Params> {
     const next: Partial<Params> = {};
     for (const f of FIELDS) {
-      const raw = input(f.key).value.trim();
-      const v = Number(raw);
-      next[f.key] = raw !== '' && Number.isFinite(v) ? clampNum(f.key, v) : params[f.key];
+      const v = fromInput(input(f.key).value);
+      next[f.key] = v !== null ? clampNum(f.key, v) : params[f.key];
     }
     next.mightModel = input('mightModel').value as Params['mightModel'];
     const seed = input('seed').value.trim().slice(0, MAX_SEED_LENGTH);

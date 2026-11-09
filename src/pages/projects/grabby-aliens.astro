@@ -38,22 +38,16 @@ const todayPct = (TODAY_GYR / DEFAULTS.tEndGyr) * 100;
           const [lo, hi] = RANGES[f.key];
           const id = `g-${f.key}`;
           return (
-            <div class={`g-field g-${f.input}`} data-model={f.model}>
-              <label class="g-row" for={id}>
-                <span>{f.label}</span>
-                {f.input === 'range' && <output class="muted" for={id} data-out={f.key}></output>}
-              </label>
-              {f.input === 'range' ? (
-                <input id={id} name={f.key} type="range" min={lo} max={hi} step={f.step} value={toInput(DEFAULTS[f.key])} />
-              ) : (
-                <span class="g-num">
-                  <input id={id} name={f.key} class="field" type="number" inputmode="decimal" min={lo} max={hi} step={f.step} value={toInput(DEFAULTS[f.key])} />
-                  {f.unit && <span class="muted">{f.unit}</span>}
-                </span>
+            <div class="g-field g-number" data-model={f.model}>
+              <label class="g-row" for={id}><span>{f.label}</span></label>
+              <span class="g-num">
+                <input id={id} name={f.key} class="field" type="number" inputmode="decimal" min={lo} max={hi} step="any" value={toInput(DEFAULTS[f.key])} />
+                {f.unit && <span class="muted">{f.unit}</span>}
+              </span>
+              {f.slider !== undefined && (
+                <input class="g-slider" type="range" data-slider={f.key} min={lo} max={hi} step={f.slider} value={DEFAULTS[f.key]} aria-label={`${f.label} slider`} tabindex="-1" />
               )}
-              {f.key === 'temperMean'
-                ? <span class="g-row g-hint"><span>peaceful · {fmt(lo)}</span><span>{fmt(hi)} · aggressive</span></span>
-                : <span class="g-hint">range {fmt(lo)} – {fmt(hi)}{f.unit ? ` ${f.unit}` : ''}</span>}
+              <span class="g-hint">range {fmt(lo)} – {fmt(hi)}{f.unit ? ` ${f.unit}` : ''}{f.note ? ` · ${f.note}` : ''}</span>
             </div>
           );
         })}
@@ -157,7 +151,7 @@ const todayPct = (TODAY_GYR / DEFAULTS.tEndGyr) * 100;
   .grabby .g-number { flex-direction: row; flex-wrap: wrap; justify-content: space-between; align-items: baseline; column-gap: 12px; }
   .grabby .g-number .g-num { display: flex; gap: 4px; align-items: baseline; }
   .grabby .g-number .g-num .field { width: 84px; }
-  .grabby .g-number .g-hint { flex-basis: 100%; }
+  .grabby .g-number .g-hint, .grabby .g-number .g-slider { flex-basis: 100%; }
   .grabby .g-hint { font-size: 11px; color: var(--muted); }
   .grabby .g-field[data-off] > label { color: var(--muted); }
   .grabby .g-actions { display: flex; gap: 16px; padding-top: 4px; }
