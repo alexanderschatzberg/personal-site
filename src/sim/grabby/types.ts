@@ -1,0 +1,162 @@
+// Shared contract between the simulation engine and the page that draws it.
+// Engine: src/sim/grabby/{rng,geometry,engine,timeline}.ts. View: src/sim/grabby/view/*.
+
+export type Dim = 2 | 3;
+/** 'sphere' is the surface of a sphere and only exists in 2d. */
+export type Geometry = 'flat' | 'torus' | 'sphere';
+/**
+ * How a civilization's might grows with the galaxies it holds (N):
+ * - power:    base × N^mightExponent
+ * - log:      base × ln(1 + N)
+ * - frontier: base × (own galaxies within frontierRadiusGly of the contested galaxy)
+ */
+export type MightModel = 'power' | 'log' | 'frontier';
+
+export interface Params {
+  dim: Dim;
+  geometry: Geometry;
+  /** Flat/torus: side length of the square or cube. Sphere: circumference. In Gly. */
+  sizeGly: number;
+  /** Number of simulated points. Each stands for REAL_GALAXIES / galaxies real galaxies. */
+  galaxies: number;
+  planetsPerGalaxy: number;
+  /** Chance that a single planet produces a grabby civilization at some point. */
+  pLife: number;
+  /** Hard-steps exponent n: origin time is drawn with density ∝ t^n on [0, tEndGyr]. */
+  hardSteps: number;
+  /** Expansion speed range, as a fraction of c. Each civ draws uniformly from it. */
+  speedMin: number;
+  speedMax: number;
+  /** Temperament: 0 = always leaves others alone, 1 = always declares war. Each civ draws
+   *  from a normal(temperMean, temperSpread) clamped to [0, 1]. */
+  temperMean: number;
+  temperSpread: number;
+  /** Base (intrinsic) might range. Each civ draws uniformly from it. */
+  mightMin: number;
+  mightMax: number;
+  mightModel: MightModel;
+  /** α for the 'power' model. */
+  mightExponent: number;
+  /** Radius for the 'frontier' model, in Gly. */
+  frontierRadiusGly: number;
+  /** Multiplier on the defender's might in a battle. */
+  defenderBonus: number;
+  /** The simulation stops here, in Gyr after the big bang. */
+  tEndGyr: number;
+  seed: string;
+}
+
+/** Real galaxies in the observable universe (order of magnitude, Conselice et al. 2016). */
+export const REAL_GALAXIES = 2e12;
+/** Age of the universe today, for the "today" marker. */
+export const TODAY_GYR = 13.8;
+
+export const DEFAULTS: Params = {
+  dim: 2,
+  geometry: 'flat',
+  sizeGly: 93, // diameter of the observable universe
+  galaxies: 4000,
+  planetsPerGalaxy: 1e11,
+  pLife: 1e-22,
+  hardSteps: 6,
+  speedMin: 0.3,
+  speedMax: 0.9,
+  temperMean: 0.5,
+  temperSpread: 0.25,
+  mightMin: 1,
+  mightMax: 10,
+  mightModel: 'power',
+  mightExponent: 0.6,
+  frontierRadiusGly: 10,
+  defenderBonus: 1.5,
+  tEndGyr: 200,
+  seed: '5eed',
+};
+
+/** Allowed [min, max] for each numeric param. The engine clamps to these; the UI uses them. */
+export const RANGES = {
+  sizeGly: [10, 500],
+  galaxies: [500, 50000],
+  planetsPerGalaxy: [1e9, 1e13],
+  pLife: [1e-30, 1e-10],
+  hardSteps: [0, 12],
+  speedMin: [0.01, 0.99],
+  speedMax: [0.01, 0.99],
+  temperMean: [0, 1],
+  temperSpread: [0, 1],
+  mightMin: [1, 100],
+  mightMax: [1, 100],
+  mightExponent: [0.1, 1],
+  frontierRadiusGly: [1, 100],
+  defenderBonus: [1, 5],
+  tEndGyr: [20, 1000],
+} as const satisfies Record<string, readonly [number, number]>;
+
+export interface Civ {
+  id: number; // index into SimResult.civs
+  origin: number; // galaxy index
+  t0: number; // Gyr
+  speed: number; // fraction of c
+  temper: number; // 0..1
+  baseMight: number;
+}
+
+export type OwnershipKind = 'arise' | 'colonize' | 'conquer';
+
+/** One change of a galaxy's owner. `prev` lets the timeline step backwards. -1 = nobody. */
+export interface OwnershipEvent {
+  t: number;
+  galaxy: number;
+  owner: number;
+  prev: number;
+  kind: OwnershipKind;
+}
+
+export type CivEventKind = 'arise' | 'meet' | 'war' | 'peace' | 'conquer' | 'repel' | 'extinct';
+
+/** Story-level events for the log. `other` is the other civ, `galaxy` where it happened. */
+export interface CivEvent {
+  t: number;
+  civ: number;
+  kind: CivEventKind;
+  other?: number;
+  galaxy?: number;
+}
+
+export interface SimResult {
+  params: Params; // after clamping
+  /** xyz per galaxy (z = 0 for 2d flat/torus; on the sphere surface for 'sphere'). In Gly. */
+  positions: Float32Array;
+  civs: Civ[];
+  /** Sorted by t ascending (ties keep processing order). */
+  events: OwnershipEvent[];
+  /** Sorted by t ascending. */
+  log: CivEvent[];
+  /** Time the last event happened, or params.tEndGyr if the queue ran until the end. */
+  tLast: number;
+}
+
+/** engine.ts exports: `export function simulate(p: Partial<Params>): SimResult` */
+export type Simulate = (p: Partial<Params>) => SimResult;
+
+/**
+ * timeline.ts exports: `export function createTimeline(r: SimResult): Timeline`.
+ * Scrubbing replays OwnershipEvents forwards or backwards from the current position, so a
+ * small seek is cheap. A fresh timeline starts at t = 0 with nobody owning anything.
+ */
+export interface Timeline {
+  readonly t: number;
+  /** Move to time t (clamped to [0, params.tEndGyr]). Applies every event with e.t <= t. */
+  seek(t: number): void;
+  /** Owner of each galaxy at the current time, -1 = nobody. Updated in place by seek. */
+  readonly owner: Int32Array;
+  /** Galaxies held by each civ at the current time. Updated in place by seek. */
+  readonly held: Int32Array;
+  /** Galaxies owned by anyone at the current time. */
+  readonly claimed: number;
+  /** Civs that have arisen and still hold at least one galaxy. */
+  readonly alive: number;
+  /** Galaxies whose owner changed during the last seek (for partial colour updates). */
+  readonly changed: Int32Array;
+  readonly changedCount: number;
+}
