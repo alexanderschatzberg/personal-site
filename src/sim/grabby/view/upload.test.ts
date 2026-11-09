@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { UploadTracker, type UploadAttr } from './upload';
+import { MAX_PENDING_RANGES, UploadTracker, type UploadAttr } from './upload';
 
 /**
  * Mimics three r187's BufferAttribute + WebGLAttributes contract: needsUpdate bumps version;
@@ -88,5 +88,17 @@ describe('upload tracker', () => {
     expect(a.render()!.size).toBe(100);
     t.markRange(30, 3);
     expect([...a.render()!]).toEqual(span(30, 33));
+  });
+
+  it('ranges stay bounded across many commits with no upload (hidden layer), then go full', () => {
+    const a = new FakeAttr(100);
+    const t = new UploadTracker(a);
+    a.render(); // shown once: first upload done
+    // hidden: three skips the object, so no render/upload happens while commits continue
+    for (let i = 0; i < 10_000; i++) t.markRange(i % 97, 2);
+    expect(a.updateRanges.length).toBeLessThanOrEqual(MAX_PENDING_RANGES);
+    expect(a.render()!.size).toBe(100); // shown again: one full upload
+    t.markRange(30, 3);
+    expect([...a.render()!]).toEqual(span(30, 33)); // then partial again
   });
 });
