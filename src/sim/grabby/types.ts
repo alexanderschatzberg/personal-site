@@ -17,6 +17,11 @@ export interface Params {
   geometry: Geometry;
   /** Flat/torus: side length of the square or cube. Sphere: circumference. In Gly. */
   sizeGly: number;
+  /** Large-scale structure: 0 = uniform, 1 = strong cosmic web (filaments and walls around voids). */
+  clumpiness: number;
+  /** Typical void (web cell) diameter, in Gly. Real voids are ~0.1–0.3 Gly; the default is scaled
+   *  up so the web is visible at the resolution of a few thousand points. */
+  webScaleGly: number;
   /** Number of simulated points. Each stands for REAL_GALAXIES / galaxies real galaxies. */
   galaxies: number;
   planetsPerGalaxy: number;
@@ -43,7 +48,8 @@ export interface Params {
   frontierRadiusGly: number;
   /** Multiplier on the defender's might in a battle. */
   defenderBonus: number;
-  /** Lifetime of the universe: the simulation stops here, in Gyr after the big bang. */
+  /** Safety cap only (not shown in the UI): the run normally ends when no empire can reach any
+   *  more galaxies (SimResult.tLast). In Gyr after the big bang. */
   tEndGyr: number;
   /** Hubble constant today, km/s/Mpc. 0 = static universe (no expansion, scale factor 1). */
   H0: number;
@@ -65,6 +71,8 @@ export const DEFAULTS: Params = {
   dim: 2,
   geometry: 'flat',
   sizeGly: 93, // diameter of the observable universe
+  clumpiness: 0.7,
+  webScaleGly: 12,
   galaxies: 4000,
   planetsPerGalaxy: 1e11,
   pLife: 1e-22,
@@ -80,7 +88,7 @@ export const DEFAULTS: Params = {
   mightExponent: 0.6,
   frontierRadiusGly: 10,
   defenderBonus: 1.5,
-  tEndGyr: 200,
+  tEndGyr: 5000,
   H0: 67.7, // Planck 2018
   omegaLambda: 0.69, // Planck 2018
   seed: '5eed',
@@ -89,6 +97,8 @@ export const DEFAULTS: Params = {
 /** Allowed [min, max] for each numeric param. The engine clamps to these; the UI uses them. */
 export const RANGES = {
   sizeGly: [10, 500],
+  clumpiness: [0, 1],
+  webScaleGly: [2, 100],
   galaxies: [500, 50000],
   planetsPerGalaxy: [1e9, 1e13],
   pLife: [1e-30, 1e-10],
@@ -103,7 +113,7 @@ export const RANGES = {
   mightExponent: [0.1, 1],
   frontierRadiusGly: [1, 100],
   defenderBonus: [1, 5],
-  tEndGyr: [20, 1000],
+  tEndGyr: [20, 10000],
   H0: [0, 150],
   omegaLambda: [0, 0.99],
 } as const satisfies Record<string, readonly [number, number]>;
@@ -151,8 +161,8 @@ export interface SimResult {
   log: CivEvent[];
   /** Time the last event happened, or params.tEndGyr if the queue ran until the end. */
   tLast: number;
-  /** Scale factor a(t) at SCALE_SAMPLES evenly spaced times from 0 to params.tEndGyr inclusive
-   *  (sample i is at t = i * tEndGyr / (SCALE_SAMPLES - 1)). All 1 when H0 = 0. Physical
+  /** Scale factor a(t) at SCALE_SAMPLES evenly spaced times from 0 to tLast inclusive
+   *  (sample i is at t = i * tLast / (SCALE_SAMPLES - 1); all samples a(0) if tLast = 0). All 1 when H0 = 0. Physical
    *  position at time t = positions × a(t). Interpolate linearly between samples. */
   scale: Float64Array;
   /** The symmetrised kNN neighbour graph the fronts travel along, as index pairs (i, j) with

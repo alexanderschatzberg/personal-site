@@ -296,3 +296,76 @@ Prove it with:
 - a dev server curl 200 on port 4332, stopped afterwards
 
 There is no browser, so list what couldn't be verified visually. Simulating a phone viewport with curl isn't possible.
+
+---
+
+# Round 4: user feedback after first use
+
+The user asked for:
+1. auto zoom-out at the true expansion rate, with the run ending only when no empire can reach any more galaxies
+2. a 2D torus shown as a donut
+3. galaxy structure like our universe (a cosmic web)
+4. a click opening the region clicked, never an unclaimed galaxy (broken in 3D)
+5. complex settings under an advanced drawer
+6. tooltips on anything confusing
+
+The contract changes, already in `types.ts`:
+- Params `clumpiness` (default 0.7, range 0–1) and `webScaleGly` (default 12, range 2–100).
+- `tEndGyr` is now a hidden safety cap: default 5000, range up to 10000, not shown in the UI.
+- `SimResult.scale` is sampled over **[0, tLast]**, not [0, tEnd].
+
+## Acceptance criteria (round 4)
+
+27. **Run end.** The run ends at the last event, when nothing more can happen: no pending arrival can land (fronts are cut, at peace, or beyond the event horizon) and no pending arise remains. tEndGyr is only a safety cap. With the defaults, tLast < tEndGyr on all 6 seeds (report the values). With H0 = 0, the run ends when every reachable galaxy is settled.
+28. **Camera.** Rendered positions are physical: comoving × a(t). The camera's auto-zoom keeps the today view fixed after today. Effective display scale is d(t) = min(a(t), 1), so before today the universe visibly grows from a dense start and after today the map holds still. The scale bar and the `a =` readout show the true values. The user's own zoom and pan multiply on top. `[reset view]` returns to the auto-fit.
+29. **Donut torus.** In 2D torus mode, the galaxies, borders, picking and camera use a donut embedding:
+    - u = x/size, v = y/size, both mapped to angles.
+    - Major radius R and minor radius r with R ≈ 2.5r, sized to fit the view.
+    - The simulation metric stays the flat torus (minimum image). Only the drawing changes.
+    - Drag rotates the donut, as on the globe.
+    - 3D torus stays a cube, but shows faded wrap copies of the territory colours across each face, or a clear wrap indicator. It is never mis-drawn.
+30. **Cosmic web.** Positions come from a Voronoi kinematic model (van de Weygaert):
+    - Nuclei are placed with mean spacing webScaleGly.
+    - Each galaxy starts uniform and is moved away from its nearest nucleus towards the Voronoi walls (3D) or edges (2D), and into filaments and nodes by a second step, by a fraction set by clumpiness.
+    - clumpiness 0 means exactly uniform, consuming the RNG in the same order as before, so the H0 = 0 fixture still matches when its cases pin clumpiness 0 and tEndGyr 200.
+    - It works for flat (clamped to the box), torus (wraps) and sphere (nuclei on the sphere, great-circle distance, result re-projected onto the surface), in 2D and 3D.
+    - It is deterministic.
+    - Tests check a measurable statistic: clustering is stronger than uniform. For example, the nearest-neighbour distance variance, or the count-in-cells variance, rises with clumpiness. Report the measured values.
+31. **Click picks a region.** Clicking or tapping opens the info card only for an **owned** galaxy:
+    - Among owned galaxies within about 24px on screen of the pointer, pick the nearest on screen. In 3D, prefer the one closest to the camera within a few px.
+    - Galaxies hidden on the far side of the globe or donut don't count.
+    - If no owned galaxy is within range, close any open card and open nothing.
+    - Unclaimed galaxies are never shown, so the "unclaimed galaxy" card is removed.
+    - The pick runs on the same transformed positions as the drawing: physical scale, donut embedding, user zoom.
+    - Pure selection logic is tested in 2D, in 3D with depth, and on the donut.
+32. **Advanced drawer.**
+    - The main drawer or phone sheet shows only the basics: galaxies, clumpiness, p(life), speed min/max, temperament mean, seed, `[apply]` and `[reroll]`.
+    - `[advanced]` expands a section, or a tab on phones, holding everything else: universe size, web scale, planets per galaxy, hard steps, life window, temperament spread, might model, might min/max, α, frontier radius, defender bonus, H0, ΩΛ and `[no expansion]`.
+    - The open or closed state is remembered in localStorage (wrapped in try/catch).
+    - tEndGyr is not shown anywhere.
+33. **Tooltips.**
+    - Every field except the obvious ones gets a `[?]` button. Every advanced field has one, as do clumpiness, p(life), temperament and speed. The button opens a short plain-English explanation.
+    - It works on hover, keyboard focus (Escape closes it) and tap. Use `aria-describedby` or an accessible popover.
+    - Only one is open at a time, and it stays inside the screen on phones.
+    - The copy lives in one table (`view/help.ts`). A test checks that every field shown in the advanced drawer has help text.
+    - The text is accurate to the model. Don't invent facts: cite "Planck 2018" for the H0/ΩΛ defaults and "Hanson et al. 2021" for hard steps. Other numbers come only from types.ts comments.
+34. **Gate:** `npm test` and `npm run build` pass, and no existing test is weakened.
+
+## U7: engine (criteria 27, 30, plus the scale span)
+
+U7 owns `engine.ts`, `geometry.ts`, `cosmology.ts`, a new `structure.ts`, and the engine tests and fixture case files. The fixture JSON must not be regenerated: cases pin `clumpiness: 0` and `tEndGyr: 200` explicitly, along with the existing `lifeWindowGyr` pin. Watch the time-span edge cases:
+- The cosmology table is now built over [0, tEndGyr = 5000], so check the table resolution near today and the etaInf tail.
+- `scale` is sampled over [0, tLast] after the run.
+
+## U8: view (criteria 28, 29, 31, 32, 33)
+
+U8 owns `grabby-aliens.astro`, `view/**` and `worker.ts`.
+
+It must also make sure that:
+- the `lifetime` field is removed
+- the scrubber spans [0, tLast], as now
+- the readout's end text no longer says "lifetime reached". Use `ended · cap reached` when tLast = tEndGyr, otherwise `ended · no more galaxies in reach`.
+
+## Waves
+
+U7 and U8 run in parallel in separate worktrees off pm/grabby-aliens. Merge U7, then U8. Gate. Then one reviewer on the round 4 diff.

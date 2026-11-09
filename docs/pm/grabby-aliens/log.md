@@ -1,10 +1,12 @@
 # pm log: grabby aliens simulation
 
 Branch: `pm/grabby-aliens` · Plan: `plan.md` · Started: 2026-11-09
-State: awaiting merge OK
+State: round 4 implementing (user feedback)
 
 ## For the user
 
+- 2026-11-09 **review**: Cosmic web scale: real voids are ~0.1–0.3 Gly across, smaller than the ~1.5 Gly spacing between the simulated dots (each dot is ~5×10⁸ galaxies). The default web scale (12 Gly) is enlarged so the structure is visible. It is not to scale.
+- 2026-11-09 **review**: The 2D torus is drawn as a donut, but the physics still uses a flat torus: distances don't stretch on the outside of the donut the way they would on a real ring surface. The 3D torus stays a cube with wrap hints.
 - 2026-11-09 **unfixed (minor)**: The phone sheet tabs have no matching tabpanel role, so screen-reader semantics are incomplete. The heavy-run note and the info card can overlap at the top in portrait.
 - 2026-11-09 **review**: A phone [apply] writes galaxies=2000 into the URL, so a link shared from a phone opens a 2000-galaxy run on desktop too.
 - 2026-11-09 **review**: Civilization names are zero-based (civ-00, civ-01, …).
@@ -47,3 +49,11 @@ State: awaiting merge OK
   All three go to fix round 1.
 - 2026-11-09 Phase 5 fix round 1: 3 commits (584a620, eab6073, 28627ba), 114 tests. Re-review: findings 1 and 3 closed. Finding 2 moved: clamping a(t) to 3e38 freezes growth and shows the wrong a and scale bar past t≈595 Gyr at H0=150/ΩΛ=0.99/tEnd=1000. New minor: hidden border layer accumulates updateRanges without bound. Both are cheap, so fix round 2. Contract change by the PM: SimResult.scale is now Float64Array (a max ≈ e^153 within RANGES, finite as a double).
 - 2026-11-09 Phase 5 fix round 2: 1c5ad90 (scale Float64, no clamp, formatA) and fda9101 (UploadTracker caps pending ranges at 64, then switches to a full upload). The PM read the small fix diff directly, skipping a third reviewer agent to save tokens, and found no new issues. Note: a seek that changes more than 64 separate ranges now does a full colour upload, which is cheap. Gate: 118/118 tests, build OK.
+- 2026-11-09 Round 4: User feedback after use:
+  - the camera tracks the true a(t), with growth only before today
+  - the run ends only when nothing more is reachable; tEnd is now a hidden 5000 Gyr safety cap
+  - a donut torus in 2D
+  - a cosmic web via a Voronoi kinematic model, with clumpiness and web scale
+  - clicks pick owned regions only
+  - an advanced drawer and tooltips
+  Contract updated. U7 (engine) and U8 (view) run in parallel.
