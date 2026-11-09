@@ -40,13 +40,26 @@ describe('SimResult cosmology fields', () => {
     const c = makeCosmology(DEFAULTS.H0, DEFAULTS.omegaLambda, DEFAULTS.tEndGyr);
     expect(r.scale).toBeInstanceOf(Float64Array);
     expect(r.scale.length).toBe(SCALE_SAMPLES);
-    expect(Array.from(r.scale)).toEqual(Array.from(c.scale));
+    // Round 4: sampled over [0, tLast], not [0, tEnd].
+    expect(r.tLast).toBeGreaterThan(0);
+    expect(r.tLast).toBeLessThan(r.params.tEndGyr);
+    for (let i = 0; i < SCALE_SAMPLES; i++) {
+      expect(r.scale[i]).toBe(c.a((i * r.tLast) / (SCALE_SAMPLES - 1)));
+    }
+    expect(r.scale[SCALE_SAMPLES - 1]).toBe(c.a(r.tLast));
     expect(r.tToday).toBe(c.tToday);
     expect(Math.abs(r.tToday! - 13.8)).toBeLessThanOrEqual(0.1);
 
     const s = simulate({ H0: 0 });
     expect(s.tToday).toBe(TODAY_GYR);
     expect(Array.from(s.scale).every((x) => x === 1)).toBe(true);
+
+    // No civ ever arises: tLast = 0 and every sample is a(0).
+    const empty = simulate({ pLife: 1e-30, galaxies: 500 });
+    expect(empty.civs.length).toBe(0);
+    expect(empty.tLast).toBe(0);
+    expect(empty.scale.length).toBe(SCALE_SAMPLES);
+    expect(Array.from(empty.scale).every((x) => x === c.a(0))).toBe(true);
   });
 
   it('edges are the symmetrised kNN graph, i < j, each pair once', () => {

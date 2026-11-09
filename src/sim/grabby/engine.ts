@@ -328,14 +328,15 @@ export function simulate(input: Partial<Params>): SimResult {
     if (war === undefined || (war && !battles.has((A * n + g) * n + s))) cutByLifetime = true;
   }
 
+  const tEndRun = cutByLifetime ? p.tEndGyr : tLast;
   return {
     params: p,
     positions,
     civs,
     events,
     log,
-    tLast: cutByLifetime ? p.tEndGyr : tLast,
-    scale: cosmo.scale,
+    tLast: tEndRun,
+    scale: cosmo.scaleOver(tEndRun),
     edges,
     tToday: cosmo.tToday,
   };
