@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { makeCosmology } from './cosmology';
+import { SCALE_MAX, makeCosmology } from './cosmology';
 import { DEFAULTS, KMS_MPC_TO_PER_GYR, SCALE_SAMPLES, TODAY_GYR } from './types';
 
 describe('cosmology', () => {
@@ -98,5 +98,13 @@ describe('cosmology', () => {
     expect(horizonToday).toBeLessThan(18);
     expect(makeCosmology(67.7, 0, 200).etaInf).toBe(Infinity);
     expect(makeCosmology(0, 0.69, 200).etaInf).toBe(Infinity);
+  });
+
+  it('keeps every scale sample finite at the top of the parameter ranges', () => {
+    // H0 = 150, ΩΛ = 0.99, tEnd = 1000: a(t) passes Float32's max (3.4e38) long before tEnd.
+    const c = makeCosmology(150, 0.99, 1000);
+    expect(c.a(1000)).toBeGreaterThan(3.5e38);
+    for (const v of c.scale) expect(Number.isFinite(v)).toBe(true);
+    expect(c.scale[c.scale.length - 1]).toBe(Math.fround(SCALE_MAX));
   });
 });

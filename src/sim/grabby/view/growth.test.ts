@@ -45,4 +45,18 @@ describe('growth display', () => {
     expect(physicalPerRendered(Math.E, 2)).toBeCloseTo(Math.E / 2);
     expect(physicalPerRendered(1, 1)).toBe(1);
   });
+
+  it('stays finite when scale samples overflow to Infinity', () => {
+    const scale = new Float32Array([1, Infinity, Infinity]);
+    const a = scaleAt(scale, 20, 15);
+    expect(Number.isFinite(a)).toBe(true);
+    expect(a).toBeGreaterThan(1e38);
+    expect(Number.isFinite(scaleAt(scale, 20, 5))).toBe(true);
+    for (const x of [Infinity, NaN]) {
+      const s = displayScale(x, 70);
+      expect(Number.isFinite(s)).toBe(true);
+      expect(Number.isFinite(physicalPerRendered(x, s))).toBe(true);
+    }
+    expect(displayScale(Infinity, 70)).toBeGreaterThan(1 + Math.log(1e38));
+  });
 });
