@@ -165,7 +165,8 @@ export interface SimResult {
    *  (sample i is at t = i * tLast / (SCALE_SAMPLES - 1); all samples a(0) if tLast = 0). All 1 when H0 = 0. Physical
    *  position at time t = positions × a(t). Interpolate linearly between samples. */
   scale: Float64Array;
-  /** The symmetrised kNN neighbour graph the fronts travel along, as index pairs (i, j) with
+  /** The symmetrised kNN neighbour graph (plus the fewest shortest bridges that make it connected
+   *  when the cosmic web splits it into clumps) that the fronts travel along, as index pairs (i, j) with
    *  i < j, each pair once: edges[2k], edges[2k+1]. The view draws borders on edges whose two
    *  ends have different owners. */
   edges: Uint32Array;
