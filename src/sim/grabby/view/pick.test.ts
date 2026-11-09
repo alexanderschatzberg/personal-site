@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { embedPositions } from './donut';
-import { DEPTH_PX, isTap, nearestOnScreen, PICK_RADIUS_PX, pickOwned, projectForPick } from './pick';
+import { DEPTH_PX, isTap, nearestOnScreen, PICK_RADIUS_PX, pickOwned, projectForPick, torusBlocks } from './pick';
+import { donutRadii, embedPositions } from './donut';
 
 describe('picking', () => {
   // screen positions (x, y) per galaxy; NaN = not visible (behind the camera or the globe)
@@ -86,5 +86,83 @@ describe('pick an owned galaxy (a region)', () => {
     projectForPick(world, { kind: 'none' }, id, id, [0, 0, 10], { left: 0, top: 0, width: 100, height: 100 }, xy, depth);
     expect(Number.isFinite(xy[2])).toBe(true); // no surface: the back point is not hidden
     expect(Number.isNaN(xy[4])).toBe(true); // x = 5 is off screen
+  });
+});
+
+describe('donut self-occlusion (a torus is not convex)', () => {
+  // The renderer's setup: side L, occluder tube 0.985 r, the group tilted about x towards
+  // edge-on, a 40° perspective camera on +z at the default fit distance (square viewport).
+  const L = 93;
+  const { R, r } = donutRadii(L);
+  const tilt = -1.4;
+  const fov = 40;
+  const D = ((R + r) * 1.3) / Math.tan(((fov / 2) * Math.PI) / 180);
+  const c = Math.cos(tilt), s = Math.sin(tilt);
+  const rect = { left: 0, top: 0, width: 400, height: 400 };
+  // flat-torus coords: x runs round the hole (u = 2πx/L), y round the tube (v = 2πy/L)
+  const farInner = [L / 4, L / 2, 0]; // u = π/2 (far half), v = π: inner wall, faces the camera
+  const nearTop = [(3 * L) / 4, L / 4, 0]; // u = 3π/2 (near half), v = π/2: top of the near tube
+  const nearOuter = [(3 * L) / 4, 0, 0]; // u = 3π/2, v = 0: outer wall of the near tube
+
+  // The drawing's transform: user zoom × display scale k, a pan T, then the tilt. The camera sits
+  // at T + (0, 0, k D), so the view is the same at any k and T.
+  function setup(k: number, T: number[]) {
+    const model = [k, 0, 0, 0, 0, k * c, k * s, 0, 0, -k * s, k * c, 0, T[0], T[1], T[2], 1];
+    const cam = [T[0], T[1], T[2] + k * D];
+    const f = 1 / Math.tan(((fov / 2) * Math.PI) / 180), near = 0.001, far = 1e5;
+    const A = -(far + near) / (far - near), B = (-2 * far * near) / (far - near);
+    // projection × translate(−cam), column-major
+    const viewProj = [f, 0, 0, 0, 0, f, 0, 0, 0, 0, A, -1, -f * cam[0], -f * cam[1], -A * cam[2] + B, cam[2]];
+    return { model, cam, viewProj, f };
+  }
+
+  for (const [k, T] of [
+    [1, [0, 0, 0]],
+    [0.013, [4, -3, 7]],
+  ] as [number, number[]][]) {
+    it(`rejects a camera-facing inner-wall point hidden behind the near tube; keeps near-tube points (k ${k})`, () => {
+      const { model, cam, viewProj, f } = setup(k, T);
+      const { world, normals } = embedPositions(new Float32Array([...farInner, ...nearTop, ...nearOuter]), L);
+      // the far inner-wall point passes the back-face test, so only an occlusion test can hide it
+      const p = [world[0], c * world[1] - s * world[2], s * world[1] + c * world[2]];
+      const n = [normals[0], c * normals[1] - s * normals[2], s * normals[1] + c * normals[2]];
+      expect(n[0] * (0 - p[0]) + n[1] * (0 - p[1]) + n[2] * (D - p[2])).toBeGreaterThan(0);
+
+      const xy = new Float32Array(6), depth = new Float32Array(3);
+      projectForPick(world, { kind: 'normals', normals, torus: { R, r: 0.985 * r } }, model, viewProj, cam, rect, xy, depth);
+      expect(Number.isNaN(xy[0])).toBe(true);
+      expect(Number.isFinite(xy[2])).toBe(true);
+      expect(Number.isFinite(xy[4])).toBe(true);
+      // a tap right where the hidden owned galaxy projects does not open it
+      const tapX = 200 + (200 * f * p[0]) / (D - p[2]), tapY = 200 - (200 * f * p[1]) / (D - p[2]);
+      expect(pickOwned(xy, depth, new Int32Array([0, -1, -1]), tapX, tapY, PICK_RADIUS_PX)).toBe(-1);
+      // without the occluder (back-face test only) it would have been picked
+      projectForPick(world, { kind: 'normals', normals }, model, viewProj, cam, rect, xy, depth);
+      expect(pickOwned(xy, depth, new Int32Array([0, -1, -1]), tapX, tapY, PICK_RADIUS_PX)).toBe(0);
+    });
+  }
+
+  it('torusBlocks agrees with a fine brute-force march over the whole donut', () => {
+    const rho = 0.985 * r;
+    const inside = (x: number, y: number, z: number) => (Math.hypot(x, y) - R) ** 2 + z * z < rho * rho;
+    // camera in the donut's local frame (inverse rotation of (0, 0, D))
+    const cam = [0, s * D, c * D];
+    let disagree = 0, blocked = 0, total = 0;
+    for (let i = 0; i < 60; i++)
+      for (let j = 0; j < 60; j++) {
+        const u = (2 * Math.PI * i) / 60, v = (2 * Math.PI * j) / 60;
+        const P = [(R + r * Math.cos(v)) * Math.cos(u), (R + r * Math.cos(v)) * Math.sin(u), r * Math.sin(v)];
+        let brute = false;
+        for (let k = 1; k < 4000 && !brute; k++) {
+          const t = k / 4000;
+          brute = inside(P[0] + (cam[0] - P[0]) * t, P[1] + (cam[1] - P[1]) * t, P[2] + (cam[2] - P[2]) * t);
+        }
+        const fast = torusBlocks(P, cam, R, rho);
+        total++;
+        if (brute) blocked++;
+        if (brute !== fast) disagree++;
+      }
+    expect(blocked).toBeGreaterThan(total / 2); // back-facing (about half) plus self-occluded
+    expect(disagree).toBe(0);
   });
 });

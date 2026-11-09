@@ -23,6 +23,8 @@ const isDark = () => document.documentElement.dataset.theme === 'dark';
 const MIN_SCALE = 1e-4;
 /** Opacity of the 3d border patches. */
 const PATCH_OPACITY = 0.15;
+/** The background-coloured occluders sit this fraction inside the globe / donut surface. */
+const OCCLUDER_SHRINK = 0.985;
 
 function dotTexture() {
   const c = document.createElement('canvas');
@@ -274,7 +276,7 @@ export class Renderer {
     if (donut) {
       const { R, r: tube } = donutRadii(L);
       // A background-coloured donut just inside the surface hides its far side.
-      this.occluder = new THREE.Mesh(new THREE.TorusGeometry(R, tube * 0.985, 48, 128), new THREE.MeshBasicMaterial());
+      this.occluder = new THREE.Mesh(new THREE.TorusGeometry(R, tube * OCCLUDER_SHRINK, 48, 128), new THREE.MeshBasicMaterial());
       this.scaler.add(this.occluder);
       this.camera = this.persp;
       this.persp.position.set(0, 0, this.fitDistance(R + tube));
@@ -282,7 +284,7 @@ export class Renderer {
     } else if (sphere) {
       const R = L / (2 * Math.PI);
       // A background-coloured ball just inside the globe hides its far side.
-      this.occluder = new THREE.Mesh(new THREE.SphereGeometry(R * 0.985, 48, 32), new THREE.MeshBasicMaterial());
+      this.occluder = new THREE.Mesh(new THREE.SphereGeometry(R * OCCLUDER_SHRINK, 48, 32), new THREE.MeshBasicMaterial());
       this.scaler.add(this.occluder);
       this.camera = this.persp;
       this.persp.position.set(0, 0, R * 4.2);
@@ -410,7 +412,8 @@ export class Renderer {
   /**
    * The owned galaxy a tap at a viewport point opens, or -1 (see pickOwned). Projects every galaxy
    * with the drawing's own transform (display scale, donut, user zoom); points behind the
-   * camera, off screen or on the far side of the globe or donut are skipped.
+   * camera, off screen, on the far side of the globe or donut, or hidden by another part of the
+   * donut are skipped.
    */
   pick(clientX: number, clientY: number, maxPx: number, owner: Int32Array): number {
     const r = this.result;
@@ -423,7 +426,12 @@ export class Renderer {
     this.scene.updateMatrixWorld();
     this.camera.updateMatrixWorld();
     const viewProj = new THREE.Matrix4().multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse).elements;
-    const facing: Facing = this.donut ? { kind: 'normals', normals: this.donut.normals } : r.params.geometry === 'sphere' ? { kind: 'sphere' } : { kind: 'none' };
+    // The donut's occluder (same radii as setResult's mesh) sits in the scaler, as content does with
+    // no offset, so it shares the points' local space and world matrix.
+    const radii = donutRadii(r.params.sizeGly);
+    const facing: Facing = this.donut
+      ? { kind: 'normals', normals: this.donut.normals, torus: { R: radii.R, r: radii.r * OCCLUDER_SHRINK } }
+      : r.params.geometry === 'sphere' ? { kind: 'sphere' } : { kind: 'none' };
     const local = this.donut ? this.donut.world : r.positions;
     const cam = this.camera.position;
     projectForPick(local, facing, this.content.matrixWorld.elements, viewProj, [cam.x, cam.y, cam.z], this.renderer.domElement.getBoundingClientRect(), this.screenXY, this.depth);
