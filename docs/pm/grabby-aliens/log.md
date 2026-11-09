@@ -5,6 +5,7 @@ State: round 4 implementing (user feedback)
 
 ## For the user
 
+- 2026-11-09 **review**: When the cosmic web leaves clumps no front can leave, the engine adds the fewest shortest 'bridge' links between them, so empires can cross voids. Without bridges, galaxies in an isolated clump could never be reached.
 - 2026-11-09 **review**: Cosmic web scale: real voids are ~0.1–0.3 Gly across, smaller than the ~1.5 Gly spacing between the simulated dots (each dot is ~5×10⁸ galaxies). The default web scale (12 Gly) is enlarged so the structure is visible. It is not to scale.
 - 2026-11-09 **review**: The 2D torus is drawn as a donut, but the physics still uses a flat torus: distances don't stretch on the outside of the donut the way they would on a real ring surface. The 3D torus stays a cube with wrap hints.
 - 2026-11-09 **unfixed (minor)**: The phone sheet tabs have no matching tabpanel role, so screen-reader semantics are incomplete. The heavy-run note and the info card can overlap at the top in portrait.
@@ -65,3 +66,8 @@ State: round 4 implementing (user feedback)
   The PM checked each change against criteria 28, 32 and 33: they track the spec and none of them weakens a check.
   - UI constants: DEPTH_PX 4, donut 2(R+r) = size, initial tilt -0.9 rad, fit margin 1.3.
   - Known limitation: a front-facing point hidden by the other side of the tube at grazing angles can still be picked.
+- 2026-11-09 Round 4: U7 engine done (7 commits).
+  - Cosmic web via a Voronoi kinematic model. Clustering rises with clumpiness: count-in-cells variance/mean in flat 2d goes 0.90 → 4.72 → 30.3.
+  - Judgement call: added Borůvka "bridges" so the kNN graph stays connected when the web splits it into clumps (about 30 islands otherwise). 50k 2d went from 165 to 837 ms.
+  - Default tLast per seed is 139–188 Gyr, all below the 5000 cap. With H0 = 0 every galaxy gets settled.
+  - Merged U7, then U8. The PM updated the `edges` comment in types.ts. Gate: 160/160 tests, build OK.
