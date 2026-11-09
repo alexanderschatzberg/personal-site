@@ -8,6 +8,14 @@ const GEOMETRIES = ['flat', 'torus', 'sphere'] as const;
 const MODELS = ['power', 'log', 'frontier'] as const;
 export const MAX_SEED_LENGTH = 64;
 
+/** Trim and cut to MAX_SEED_LENGTH UTF-16 units without leaving half a surrogate pair. */
+export function clipSeed(raw: string): string {
+  let s = raw.trim().slice(0, MAX_SEED_LENGTH);
+  const last = s.charCodeAt(s.length - 1);
+  if (last >= 0xd800 && last <= 0xdbff) s = s.slice(0, -1);
+  return s;
+}
+
 export function clampNum(key: NumKey, v: number): number {
   const [lo, hi] = RANGES[key];
   return Math.min(hi, Math.max(lo, v));
@@ -37,7 +45,7 @@ export function queryToParams(search: string): Partial<Params> {
   const model = q.get('mightModel');
   if (model && (MODELS as readonly string[]).includes(model)) out.mightModel = model as Params['mightModel'];
   const seed = q.get('seed');
-  if (seed && seed.trim()) out.seed = seed.trim().slice(0, MAX_SEED_LENGTH);
+  if (seed && clipSeed(seed)) out.seed = clipSeed(seed);
   if (out.dim === 3 && out.geometry === 'sphere') out.geometry = 'flat';
   return out;
 }

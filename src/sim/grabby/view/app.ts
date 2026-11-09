@@ -1,12 +1,13 @@
 // Page controller: reads params from the URL, runs the worker, drives the timeline,
 // the renderer, the drawer and the time bar.
 import { createTimeline } from '../timeline';
-import { DEFAULTS, RANGES, TODAY_GYR, type Params, type SimResult, type Timeline } from '../types';
+import { DEFAULTS, type Params, type SimResult, type Timeline } from '../types';
 import type { WorkerRequest, WorkerResponse } from '../worker';
-import { FIELDS, fmt, toInput } from './fields';
-import { advance, nextSpeed, SPEEDS, step } from './playback';
+import { FIELDS, fmt, fromInput, toInput } from './fields';
+import { displayScale, physicalPerRendered, scaleAt } from './growth';
+import { advance, endStatus, nextSpeed, span, SPEEDS, step } from './playback';
 import { Renderer } from './renderer';
-import { clampNum, MAX_SEED_LENGTH, paramsToQuery, queryToParams } from './url';
+import { clampNum, clipSeed, paramsToQuery, queryToParams } from './url';
 
 export function mount(root: HTMLElement) {
   const $ = <T extends Element = HTMLElement>(sel: string) => root.querySelector(sel) as T;
@@ -21,12 +22,26 @@ export function mount(root: HTMLElement) {
   const scrubber = $<HTMLInputElement>('.g-scrubber');
   const today = $('.g-today');
   const speedLabel = $('.g-speed-label');
-  const out = { time: $('.g-time'), claimed: $('.g-claimed'), alive: $('.g-alive'), status: $('.g-status') };
+  const out = {
+    time: $('.g-time'),
+    claimed: $('.g-claimed'),
+    alive: $('.g-alive'),
+    status: $('.g-status'),
+    ended: $('.g-ended'),
+    a: $('.g-a'),
+    scale: $('.g-scalebar-label'),
+  };
+  const bordersBtn = $('.g-borders');
+  /** Screen length of the scale bar, CSS px (matches .g-scalebar-line in the page). */
+  const SCALE_BAR_PX = 100;
 
   let params: Params = { ...DEFAULTS, ...queryToParams(location.search) };
   let result: SimResult | undefined;
   let tl: Timeline | undefined;
   let t = 0;
+  let tSpan = 0; // playable span: 0 .. tLast
+  let a = 1; // scale factor at t
+  let s = 1; // displayed scale at t
   let playing = false;
   let speed = 0;
   let lastFrame = 0;
@@ -83,12 +98,15 @@ export function mount(root: HTMLElement) {
     syncBar();
     tl = createTimeline(r);
     renderer.setResult(r);
-    scrubber.max = String(r.params.tEndGyr);
-    today.style.left = `${(TODAY_GYR / r.params.tEndGyr) * 100}%`;
-    today.hidden = TODAY_GYR > r.params.tEndGyr;
+    tSpan = span(r);
+    scrubber.max = String(tSpan);
+    const tToday = r.tToday;
+    today.hidden = tToday === null || !(tSpan > 0) || tToday > tSpan;
+    if (tToday !== null && tSpan > 0) today.style.left = `${(tToday / tSpan) * 100}%`;
     t = 0;
     tl.seek(0);
     renderer.update(tl, true);
+    grow();
     readout();
     if (!reducedMotion) setPlaying(true);
   }
@@ -96,11 +114,30 @@ export function mount(root: HTMLElement) {
   // ---------- time ----------
   function seek(to: number) {
     if (!tl || !result) return;
-    t = Math.min(result.params.tEndGyr, Math.max(0, to));
+    t = Math.min(tSpan, Math.max(0, to));
     tl.seek(t);
     renderer.update(tl);
+    grow();
     readout();
   }
+
+  /** Scale the drawn universe for time t, and refresh the a(t) readout. */
+  function grow() {
+    if (!result) return;
+    a = scaleAt(result.scale, result.params.tEndGyr, t);
+    s = displayScale(a, result.params.H0);
+    out.a.textContent = `a = ${a > 0 && a < 0.01 ? a.toPrecision(2) : a.toFixed(2)}`;
+    renderer.setScale(s);
+    scaleBar();
+  }
+
+  /** Physical Gly spanned by the scale bar at the current a(t) and zoom. */
+  function scaleBar() {
+    if (!result) return;
+    const gly = SCALE_BAR_PX * renderer.worldPerPixel() * physicalPerRendered(a, s);
+    out.scale.textContent = `${fmt(Number(gly.toPrecision(2)))} Gly`;
+  }
+  renderer.onView = scaleBar;
 
   function readout() {
     if (!tl || !result) return;
@@ -108,6 +145,7 @@ export function mount(root: HTMLElement) {
     out.time.textContent = t.toFixed(1);
     out.claimed.textContent = n ? ((tl.claimed / n) * 100).toFixed(1) : '0';
     out.alive.textContent = String(tl.alive);
+    out.ended.textContent = endStatus(t, result.tLast, result.params.tEndGyr) ?? '';
     if (document.activeElement !== scrubber || !playing) scrubber.value = String(t);
     scrubber.setAttribute('aria-valuetext', `${t.toFixed(1)} billion years`);
   }
@@ -129,14 +167,14 @@ export function mount(root: HTMLElement) {
     if (!playing || !result) return;
     const dt = Math.min(0.1, (now - lastFrame) / 1000); // a long pause shouldn't jump
     lastFrame = now;
-    seek(advance(t, dt, result.params.tEndGyr, speed));
-    if (t >= result.params.tEndGyr) return setPlaying(false);
+    seek(advance(t, dt, tSpan, speed));
+    if (t >= tSpan) return setPlaying(false);
     raf = requestAnimationFrame(tick);
   }
 
   function togglePlay() {
     if (!result) return;
-    if (!playing && t >= result.params.tEndGyr) seek(0);
+    if (!playing && t >= tSpan) seek(0);
     setPlaying(!playing);
   }
 
@@ -163,7 +201,7 @@ export function mount(root: HTMLElement) {
     } else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && result) {
       e.preventDefault();
       setPlaying(false);
-      seek(step(t, e.key === 'ArrowLeft' ? -1 : 1, result.params.tEndGyr));
+      seek(step(t, e.key === 'ArrowLeft' ? -1 : 1, tSpan));
     }
   });
 
@@ -188,6 +226,13 @@ export function mount(root: HTMLElement) {
   for (const b of $$<HTMLButtonElement>('[data-dim]')) b.addEventListener('click', () => apply({ ...readForm(), dim: Number(b.dataset.dim) as 2 | 3 }));
   for (const b of $$<HTMLButtonElement>('[data-geometry]'))
     b.addEventListener('click', () => apply({ ...readForm(), geometry: b.dataset.geometry as Params['geometry'] }));
+
+  $('.g-reset-view').addEventListener('click', () => renderer.resetView());
+  bordersBtn.addEventListener('click', () => {
+    const on = bordersBtn.getAttribute('aria-pressed') !== 'true';
+    bordersBtn.setAttribute('aria-pressed', String(on));
+    renderer.setBorders(on);
+  });
 
   // ---------- drawer ----------
   function setDrawer(open: boolean) {
@@ -214,10 +259,10 @@ export function mount(root: HTMLElement) {
   }
 
   function syncForm() {
-    for (const o of $$<HTMLOutputElement>('output[data-out]')) {
-      const k = o.dataset.out as keyof typeof RANGES;
-      const v = Number(input(k).value);
-      o.value = k === 'temperMean' ? v.toFixed(2) : fmt(v) + (k === 'sizeGly' ? ' Gly' : '');
+    // Sliders only mirror the number boxes; the boxes hold the true value.
+    for (const sl of $$<HTMLInputElement>('input[data-slider]')) {
+      const v = fromInput(input(sl.dataset.slider!).value);
+      if (v !== null) sl.value = String(v);
     }
     const model = input('mightModel').value;
     for (const f of FIELDS) {
@@ -227,24 +272,31 @@ export function mount(root: HTMLElement) {
       input(f.key).closest('.g-field')?.toggleAttribute('data-off', off);
     }
   }
-  form.addEventListener('input', syncForm);
+  form.addEventListener('input', (e) => {
+    const sl = e.target as HTMLInputElement;
+    if (sl.dataset?.slider) input(sl.dataset.slider).value = sl.value;
+    syncForm();
+  });
 
   /** Form values, clamped to RANGES. A blank or invalid box keeps the current value. */
   function readForm(): Partial<Params> {
     const next: Partial<Params> = {};
     for (const f of FIELDS) {
-      const raw = input(f.key).value.trim();
-      const v = Number(raw);
-      next[f.key] = raw !== '' && Number.isFinite(v) ? clampNum(f.key, v) : params[f.key];
+      const v = fromInput(input(f.key).value);
+      next[f.key] = v !== null ? clampNum(f.key, v) : params[f.key];
     }
     next.mightModel = input('mightModel').value as Params['mightModel'];
-    const seed = input('seed').value.trim().slice(0, MAX_SEED_LENGTH);
+    const seed = clipSeed(input('seed').value);
     next.seed = seed || params.seed;
     return next;
   }
 
   form.addEventListener('submit', (e) => {
     e.preventDefault();
+    apply(readForm());
+  });
+  $('.g-no-expansion').addEventListener('click', () => {
+    input('H0').value = '0';
     apply(readForm());
   });
   $('.g-reroll').addEventListener('click', () => {

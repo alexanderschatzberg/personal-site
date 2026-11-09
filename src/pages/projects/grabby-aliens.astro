@@ -19,6 +19,9 @@ const todayPct = (TODAY_GYR / DEFAULTS.tEndGyr) * 100;
         <button class="btn" type="button" data-geometry="torus" aria-pressed="false">[torus]</button>
         <button class="btn" type="button" data-geometry="sphere" aria-pressed="false" title="Sphere is 2d only">[sphere]</button>
         <span class="sep" aria-hidden="true">·</span>
+        <button class="btn g-borders" type="button" aria-pressed="true">[borders]</button>
+        <button class="btn g-reset-view" type="button">[reset view]</button>
+        <span class="sep" aria-hidden="true">·</span>
         <button class="btn g-drawer-toggle" type="button" aria-expanded="false" aria-controls="g-params">[params]</button>
         <button class="btn theme-toggle" type="button" aria-label="Toggle dark mode">[dark]</button>
       </div>
@@ -28,6 +31,7 @@ const todayPct = (TODAY_GYR / DEFAULTS.tEndGyr) * 100;
       <span><span class="g-time">0.0</span> Gyr</span>
       <span><span class="g-claimed">0</span>% of galaxies claimed</span>
       <span><span class="g-alive">0</span> civilizations alive</span>
+      <span class="g-ended"></span>
       <span class="g-status" role="status" aria-live="polite"></span>
     </div>
 
@@ -38,22 +42,16 @@ const todayPct = (TODAY_GYR / DEFAULTS.tEndGyr) * 100;
           const [lo, hi] = RANGES[f.key];
           const id = `g-${f.key}`;
           return (
-            <div class={`g-field g-${f.input}`} data-model={f.model}>
-              <label class="g-row" for={id}>
-                <span>{f.label}</span>
-                {f.input === 'range' && <output class="muted" for={id} data-out={f.key}></output>}
-              </label>
-              {f.input === 'range' ? (
-                <input id={id} name={f.key} type="range" min={lo} max={hi} step={f.step} value={toInput(DEFAULTS[f.key])} />
-              ) : (
-                <span class="g-num">
-                  <input id={id} name={f.key} class="field" type="number" inputmode="decimal" min={lo} max={hi} step={f.step} value={toInput(DEFAULTS[f.key])} />
-                  {f.unit && <span class="muted">{f.unit}</span>}
-                </span>
+            <div class="g-field g-number" data-model={f.model}>
+              <label class="g-row" for={id}><span>{f.label}</span></label>
+              <span class="g-num">
+                <input id={id} name={f.key} class="field" type="number" inputmode="decimal" min={lo} max={hi} step="any" value={toInput(DEFAULTS[f.key])} />
+                {f.unit && <span class="muted">{f.unit}</span>}
+              </span>
+              {f.slider !== undefined && (
+                <input class="g-slider" type="range" data-slider={f.key} min={lo} max={hi} step={f.slider} value={DEFAULTS[f.key]} aria-label={`${f.label} slider`} tabindex="-1" />
               )}
-              {f.key === 'temperMean'
-                ? <span class="g-row g-hint"><span>peaceful · {fmt(lo)}</span><span>{fmt(hi)} · aggressive</span></span>
-                : <span class="g-hint">range {fmt(lo)} – {fmt(hi)}{f.unit ? ` ${f.unit}` : ''}</span>}
+              <span class="g-hint">range {fmt(lo)} – {fmt(hi)}{f.unit ? ` ${f.unit}` : ''}{f.note ? ` · ${f.note}` : ''}</span>
             </div>
           );
         })}
@@ -74,9 +72,15 @@ const todayPct = (TODAY_GYR / DEFAULTS.tEndGyr) * 100;
         <div class="g-actions">
           <button class="btn on" type="submit">[apply]</button>
           <button class="btn g-reroll" type="button">[reroll]</button>
+          <button class="btn g-no-expansion" type="button" title="Set H0 to 0 and apply">[no expansion]</button>
         </div>
       </form>
     </aside>
+
+    <div class="g-scale" aria-hidden="true">
+      <span class="g-scalebar"><span class="g-scalebar-line"></span><span class="g-scalebar-label">–</span></span>
+      <span class="g-a">a = 1.00</span>
+    </div>
 
     <div class="g-time-bar">
       <button class="btn g-restart" type="button" aria-label="Restart">[◀◀]</button>
@@ -84,7 +88,7 @@ const todayPct = (TODAY_GYR / DEFAULTS.tEndGyr) * 100;
       <button class="btn g-speed" type="button" aria-label="Change speed">[▶▶]</button>
       <div class="g-scrub">
         <input class="g-scrubber" type="range" min="0" max={DEFAULTS.tEndGyr} step="any" value="0" aria-label="Time in billions of years" />
-        <span class="g-today" style={`left: ${todayPct}%`} aria-hidden="true">today</span>
+        <span class="g-today" style={`left: ${todayPct}%`} aria-hidden="true" hidden>today</span>
       </div>
       <span class="muted g-speed-label">1×</span>
     </div>
@@ -144,7 +148,20 @@ const todayPct = (TODAY_GYR / DEFAULTS.tEndGyr) * 100;
   }
   .grabby .g-time { color: var(--fg); font-size: 28px; font-variant-numeric: tabular-nums; }
   .grabby .g-claimed, .grabby .g-alive { font-variant-numeric: tabular-nums; }
-  .grabby .g-status:empty { display: none; }
+  .grabby .g-status:empty, .grabby .g-ended:empty { display: none; }
+  .grabby .g-ended { color: var(--fg); }
+
+  .grabby .g-scale {
+    position: absolute; left: 32px; bottom: 76px; display: flex; flex-direction: column;
+    gap: 2px; font-size: 11px; color: var(--muted); pointer-events: none;
+    font-variant-numeric: tabular-nums;
+  }
+  .grabby .g-scalebar { display: flex; align-items: center; gap: 8px; }
+  .grabby .g-scalebar-line {
+    display: inline-block; width: 100px; height: 6px;
+    border: 1px solid var(--muted); border-top: 0;
+  }
+  .grabby .g-today[hidden] { display: none; }
 
   .grabby .g-drawer {
     position: absolute; right: 0; top: 72px; bottom: 88px; width: 300px;
@@ -157,10 +174,10 @@ const todayPct = (TODAY_GYR / DEFAULTS.tEndGyr) * 100;
   .grabby .g-number { flex-direction: row; flex-wrap: wrap; justify-content: space-between; align-items: baseline; column-gap: 12px; }
   .grabby .g-number .g-num { display: flex; gap: 4px; align-items: baseline; }
   .grabby .g-number .g-num .field { width: 84px; }
-  .grabby .g-number .g-hint { flex-basis: 100%; }
+  .grabby .g-number .g-hint, .grabby .g-number .g-slider { flex-basis: 100%; }
   .grabby .g-hint { font-size: 11px; color: var(--muted); }
   .grabby .g-field[data-off] > label { color: var(--muted); }
-  .grabby .g-actions { display: flex; gap: 16px; padding-top: 4px; }
+  .grabby .g-actions { display: flex; flex-wrap: wrap; gap: 16px; padding-top: 4px; }
 
   .grabby .g-time-bar {
     position: absolute; left: 32px; right: 32px; bottom: 28px;
@@ -178,6 +195,7 @@ const todayPct = (TODAY_GYR / DEFAULTS.tEndGyr) * 100;
     .grabby .g-top { padding: 16px; }
     .grabby .g-bar { gap: 12px; }
     .grabby .g-readout { left: 16px; top: auto; bottom: 72px; }
+    .grabby .g-scale { left: auto; right: 16px; bottom: 72px; align-items: flex-end; }
     .grabby .g-time { font-size: 22px; }
     .grabby .g-drawer {
       left: 0; width: auto; top: auto; bottom: 64px; max-height: 60dvh;
