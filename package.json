@@ -7,6 +7,7 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
+    "test": "vitest run",
     "start": "serve dist --config ../serve.json --no-port-switching --listen tcp://0.0.0.0:${PORT:-3000}"
   },
   "dependencies": {
@@ -15,7 +16,8 @@
     "three": "^0.187.0"
   },
   "devDependencies": {
-    "@types/three": "^0.187.0"
+    "@types/three": "^0.187.0",
+    "vitest": "^4.1.12"
   },
   "engines": {
     "node": ">=22"
