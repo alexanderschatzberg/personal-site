@@ -277,7 +277,7 @@ export class Renderer {
       this.occluder = new THREE.Mesh(new THREE.TorusGeometry(R, tube * 0.985, 48, 128), new THREE.MeshBasicMaterial());
       this.scaler.add(this.occluder);
       this.camera = this.persp;
-      this.persp.position.set(0, 0, (R + tube) * 3.2);
+      this.persp.position.set(0, 0, this.fitDistance(R + tube));
       this.group.rotation.set(-0.9, 0, 0);
     } else if (sphere) {
       const R = L / (2 * Math.PI);
@@ -302,14 +302,6 @@ export class Renderer {
       this.ortho.position.set(0, 0, 100);
       this.ortho.zoom = 1;
       this.extent = L / 2;
-      if (geometry === 'torus') {
-        // Unreachable since the 2d torus became a donut; kept for a flat drawing of it.
-        const h = L / 2;
-        const pts = [[-h, -h], [h, -h], [h, -h], [h, h], [h, h], [-h, h], [-h, h], [-h, -h]].map(([x, y]) => new THREE.Vector3(x, y, 0));
-        this.outline = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineDashedMaterial({ dashSize: L / 80, gapSize: L / 80 }));
-        this.outline.computeLineDistances();
-        this.scaler.add(this.outline);
-      }
     }
     this.camera.lookAt(0, 0, 0);
     this.camera.updateProjectionMatrix();
@@ -323,6 +315,14 @@ export class Renderer {
     this.resize();
     this.setupControls(dim === 2 && !sphere && !donut);
     this.applyTheme();
+  }
+
+  /** Camera distance that fits a ball of this radius (with a margin for the overlays) in the
+   *  current viewport, on narrow portrait screens too. */
+  private fitDistance(radius: number): number {
+    const w = this.container.clientWidth || 1, h = this.container.clientHeight || 1;
+    const half = Math.tan(THREE.MathUtils.degToRad(this.persp.fov) / 2) * Math.min(1, w / h);
+    return (radius * 1.3) / half;
   }
 
   private setupControls(flat: boolean) {
