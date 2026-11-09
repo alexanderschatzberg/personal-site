@@ -1,7 +1,7 @@
 // Runs the simulation off the main thread. In: { id, params }. Out: { id, result } with the
 // positions, scale and edges buffers transferred, or { id, error }.
 import { simulate } from './engine';
-import type { Params, SimResult } from './types';
+import { SCALE_SAMPLES, TODAY_GYR, type Params, type SimResult } from './types';
 
 export type WorkerRequest = { id: number; params: Partial<Params> };
 export type WorkerResponse = { id: number; result: SimResult } | { id: number; error: string };
@@ -17,6 +17,10 @@ self.onmessage = (e: MessageEvent<WorkerRequest>) => {
   const { id, params } = e.data;
   try {
     const result = simulate(params);
+    // TEMP stub: fill contract fields the engine does not produce yet. Drop at merge.
+    result.scale ??= new Float32Array(SCALE_SAMPLES).fill(1);
+    result.edges ??= new Uint32Array(0);
+    if (result.tToday === undefined) result.tToday = TODAY_GYR;
     (self as unknown as Worker).postMessage({ id, result } satisfies WorkerResponse, transferables(result));
   } catch (err) {
     (self as unknown as Worker).postMessage({ id, error: String(err) } satisfies WorkerResponse);
