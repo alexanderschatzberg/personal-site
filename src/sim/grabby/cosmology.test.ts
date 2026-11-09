@@ -100,6 +100,44 @@ describe('cosmology', () => {
     expect(makeCosmology(0, 0.69, 200).etaInf).toBe(Infinity);
   });
 
+  it('round 4: the table over the 5000 Gyr default cap (and the 10000 max) stays accurate near today', () => {
+    // The default tEndGyr went from 200 to 5000. η is tabulated on t = tEnd·s³, so a longer
+    // cap spreads the nodes thinner; check it against the 200 Gyr table (much finer there).
+    const fine = makeCosmology(DEFAULTS.H0, DEFAULTS.omegaLambda, 200);
+    for (const tEnd of [DEFAULTS.tEndGyr, 10000]) {
+      const c = makeCosmology(DEFAULTS.H0, DEFAULTS.omegaLambda, tEnd);
+      expect(Math.abs(c.tToday! - 13.8)).toBeLessThanOrEqual(0.1);
+      expect(c.a(c.tToday!)).toBeCloseTo(1, 9);
+      let worst = 0;
+      for (const t of [0.01, 0.5, 1, 5, 10, 13.8, 20, 50, 100, 150, 200]) {
+        worst = Math.max(worst, Math.abs(c.eta(t) - fine.eta(t)) / fine.eta(t));
+      }
+      console.log(`tEnd ${tEnd}: worst relative η error vs the 200 Gyr table on [0.01, 200]:`, worst);
+      expect(worst).toBeLessThan(1e-8);
+      // η(∞) is the same universe whatever the cap; the horizon today is unchanged.
+      expect(Math.abs(c.etaInf - fine.etaInf) / fine.etaInf).toBeLessThan(1e-9);
+      const horizon = c.etaInf - c.eta(c.tToday!);
+      const horizonFine = fine.etaInf - fine.eta(fine.tToday!);
+      expect(Math.abs(horizon - horizonFine)).toBeLessThan(1e-6);
+      expect(Number.isFinite(c.etaInf)).toBe(true);
+    }
+  });
+
+  it('round 4: a(t) past double range at the top of the ranges keeps η finite and monotonic', () => {
+    // H0 = 150, ΩΛ = 0.99, tEnd = 10000: sinh overflows and a(t) = Infinity late on.
+    const c = makeCosmology(150, 0.99, 10000);
+    expect(c.a(10000)).toBe(Infinity);
+    expect(Number.isFinite(c.etaEnd)).toBe(true);
+    expect(Number.isFinite(c.etaInf)).toBe(true);
+    expect(c.etaInf).toBeGreaterThanOrEqual(c.etaEnd);
+    let prev = -Infinity;
+    for (let i = 0; i <= 2000; i++) {
+      const e = c.eta((10000 * i) / 2000);
+      expect(e).toBeGreaterThanOrEqual(prev);
+      prev = e;
+    }
+  });
+
   it('stores true a(t) in double precision at the top of the parameter ranges', () => {
     // H0 = 150, ΩΛ = 0.99, tEnd = 1000: a(t) passes Float32's max (3.4e38) long before tEnd
     // but stays finite in double; samples must not be clamped.
