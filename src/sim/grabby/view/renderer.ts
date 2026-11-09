@@ -12,6 +12,7 @@ import { civColor } from './palette';
 import { MAX_PIXEL_RATIO } from './phone';
 import { nearestOnScreen } from './pick';
 import { updateRanges } from './ranges';
+import { UploadTracker } from './upload';
 
 const css = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 const isDark = () => document.documentElement.dataset.theme === 'dark';
@@ -46,6 +47,8 @@ function pointSize(n: number): number {
 class BorderLayer {
   readonly set: BorderSet;
   object?: THREE.LineSegments | THREE.InstancedMesh;
+  /** Pending GPU uploads of the object's per-slot attributes, with floats per slot. */
+  private uploads: [UploadTracker, number][] = [];
   private capacity = 0;
   private visible = true;
   private frame = new Float64Array(7);
@@ -86,6 +89,7 @@ class BorderLayer {
       mesh.frustumCulled = false;
       mesh.count = 0;
       this.object = mesh;
+      this.uploads = [[new UploadTracker(mesh.instanceMatrix), 16], [new UploadTracker(mesh.instanceColor), 3]];
     } else {
       const geo = new THREE.BufferGeometry();
       geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(cap * 6), 3).setUsage(THREE.DynamicDrawUsage));
@@ -94,6 +98,7 @@ class BorderLayer {
       const lines = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ vertexColors: true }));
       lines.frustumCulled = false;
       this.object = lines;
+      this.uploads = ['position', 'color'].map((name): [UploadTracker, number] => [new UploadTracker(geo.getAttribute(name) as THREE.BufferAttribute), 6]);
     }
     this.object.visible = this.visible;
     this.parent.add(this.object);
@@ -144,28 +149,13 @@ class BorderLayer {
     }
   }
 
-  /** Set the draw range and upload only [lo, hi] of the written entries. */
+  /** Set the draw range and upload [lo, hi] of the written entries (with any still pending). */
   private commit(lo: number, hi: number) {
     const n = this.set.activeCount;
-    if (this.object instanceof THREE.InstancedMesh) {
-      this.object.count = n;
-      if (hi < lo) return;
-      for (const [attr, size] of [[this.object.instanceMatrix, 16], [this.object.instanceColor!, 3]] as const) {
-        attr.clearUpdateRanges();
-        attr.addUpdateRange(lo * size, (hi - lo + 1) * size);
-        attr.needsUpdate = true;
-      }
-    } else if (this.object) {
-      const geo = this.object.geometry;
-      geo.setDrawRange(0, n * 2);
-      if (hi < lo) return;
-      for (const name of ['position', 'color']) {
-        const attr = geo.getAttribute(name) as THREE.BufferAttribute;
-        attr.clearUpdateRanges();
-        attr.addUpdateRange(lo * 6, (hi - lo + 1) * 6);
-        attr.needsUpdate = true;
-      }
-    }
+    if (this.object instanceof THREE.InstancedMesh) this.object.count = n;
+    else if (this.object) this.object.geometry.setDrawRange(0, n * 2);
+    if (hi < lo) return;
+    for (const [up, size] of this.uploads) up.markRange(lo * size, (hi - lo + 1) * size);
   }
 
   setVisible(on: boolean) {
@@ -180,6 +170,7 @@ class BorderLayer {
     (this.object.material as THREE.Material).dispose();
     if (this.object instanceof THREE.InstancedMesh) this.object.dispose();
     this.object = undefined;
+    this.uploads = [];
   }
 
   dispose() {
@@ -202,6 +193,7 @@ export class Renderer {
   private controls?: OrbitControls;
   private points?: THREE.Points;
   private colors?: Float32Array;
+  private colorUpload?: UploadTracker;
   private outline?: THREE.LineSegments;
   private occluder?: THREE.Mesh;
   private borders?: BorderLayer;
@@ -253,7 +245,9 @@ export class Renderer {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(r.positions, 3));
     this.colors = new Float32Array(n * 3);
-    geo.setAttribute('color', new THREE.BufferAttribute(this.colors, 3).setUsage(THREE.DynamicDrawUsage));
+    const colorAttr = new THREE.BufferAttribute(this.colors, 3).setUsage(THREE.DynamicDrawUsage);
+    geo.setAttribute('color', colorAttr);
+    this.colorUpload = new UploadTracker(colorAttr);
     this.material.size = pointSize(n);
     this.points = new THREE.Points(geo, this.material);
     this.points.frustumCulled = false;
@@ -348,7 +342,7 @@ export class Renderer {
     const c = this.colors;
     if (!c || !this.points) return;
     this.borders?.update(tl.owner, full ? null : tl.changed, tl.changedCount, full);
-    const attr = this.points.geometry.getAttribute('color') as THREE.BufferAttribute;
+    const up = this.colorUpload!;
     const ranges = full ? null : updateRanges(tl.changed, tl.changedCount, tl.owner.length, 3);
     if (!ranges || ranges.length > 0) {
       const paint = (g: number) => {
@@ -360,10 +354,9 @@ export class Renderer {
       };
       if (full) for (let g = 0; g < tl.owner.length; g++) paint(g);
       else for (let k = 0; k < tl.changedCount; k++) paint(tl.changed[k]);
-      attr.clearUpdateRanges();
-      // null = full upload (no ranges); otherwise upload only the changed stretches.
-      if (ranges) for (const r of ranges) attr.addUpdateRange(r.start, r.count);
-      attr.needsUpdate = true;
+      // null = full upload; otherwise only the changed stretches, on top of any still pending.
+      if (ranges) for (const r of ranges) up.markRange(r.start, r.count);
+      else up.markFull();
     }
     this.request();
   }
