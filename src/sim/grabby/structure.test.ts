@@ -4,8 +4,8 @@ import { describe, expect, it } from 'vitest';
 import { simulate, normalizeParams } from './engine';
 import { Space } from './geometry';
 import { makeRng } from './rng';
-import { applyCosmicWeb, webNuclei } from './structure';
-import type { Params } from './types';
+import { applyCosmicWeb, effectiveWebScaleGly, nucleusCount, webNuclei } from './structure';
+import { DEFAULTS, type Params } from './types';
 
 type Case = { name: string; p: Partial<Params> };
 
@@ -240,5 +240,37 @@ describe('cosmic web (criterion 30)', () => {
       expect(nn[2]).toBeLessThan(nn[1]);
     }
     console.log('clustering at clumpiness 0, 0.5, 1:', JSON.stringify(report, null, 1));
+  });
+});
+
+describe('effective web scale (the nucleus count is clamped to [3^dim, galaxies/8])', () => {
+  const P = (o: Partial<Params>): Params => ({ ...DEFAULTS, ...o });
+
+  it('2d flat, size 93, 4000 galaxies: web scale 2 is capped at 500 nuclei, ≈ 4.2 Gly', () => {
+    const p = P({ dim: 2, geometry: 'flat', sizeGly: 93, galaxies: 4000, webScaleGly: 2 });
+    expect(nucleusCount(p)).toBe(500);
+    expect(effectiveWebScaleGly(p)).toBeCloseTo(93 / Math.sqrt(500), 9);
+    expect(effectiveWebScaleGly(p).toFixed(1)).toBe('4.2');
+  });
+
+  it('2d flat, size 93: web scale 100 is floored to 9 nuclei, ≈ 31 Gly', () => {
+    const p = P({ dim: 2, geometry: 'flat', sizeGly: 93, galaxies: 4000, webScaleGly: 100 });
+    expect(nucleusCount(p)).toBe(9);
+    expect(effectiveWebScaleGly(p)).toBeCloseTo(31, 9);
+  });
+
+  it('unclamped: within rounding of the set value (defaults, every geometry)', () => {
+    for (const c of CASES) {
+      const p = normalizeParams(c.p);
+      expect(Math.abs(effectiveWebScaleGly(p) / p.webScaleGly - 1), c.name).toBeLessThan(0.1);
+    }
+  });
+
+  it('is the spacing that reproduces the nucleus count: measure / scale^dim = count', () => {
+    const sphere = P({ dim: 2, geometry: 'sphere', sizeGly: 93, galaxies: 500, webScaleGly: 2 });
+    const Rs = 93 / (2 * Math.PI);
+    expect((4 * Math.PI * Rs * Rs) / effectiveWebScaleGly(sphere) ** 2).toBeCloseTo(nucleusCount(sphere), 6);
+    const cube = P({ dim: 3, geometry: 'torus', sizeGly: 60, galaxies: 8000, webScaleGly: 2 });
+    expect(60 ** 3 / effectiveWebScaleGly(cube) ** 3).toBeCloseTo(nucleusCount(cube), 6);
   });
 });

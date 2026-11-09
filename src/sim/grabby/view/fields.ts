@@ -74,3 +74,17 @@ export function fromInput(s: string): number | null {
   const v = Number(raw);
   return Number.isFinite(v) ? v : null;
 }
+
+/** Above this relative difference between the set and effective web scale, the drawer says so. */
+export const WEB_NOTE_TOLERANCE = 0.1;
+
+/**
+ * Note for the web scale field when the run's effective spacing (structure.effectiveWebScaleGly)
+ * is more than 10% off the set value, else null. Larger means too few galaxies for that many
+ * cells; smaller means the universe is too small for so few.
+ */
+export function webScaleNote(set: number, effective: number): string | null {
+  if (!(set > 0) || Math.abs(effective / set - 1) <= WEB_NOTE_TOLERANCE) return null;
+  const v = effective >= 10 ? String(Math.round(effective)) : effective.toFixed(1);
+  return `effective ≈ ${v} Gly at this ${effective > set ? 'galaxy count' : 'universe size'}`;
+}

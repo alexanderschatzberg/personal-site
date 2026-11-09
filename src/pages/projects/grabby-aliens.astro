@@ -110,6 +110,7 @@ const advanced = FIELDS.filter((f) => f.group === 'advanced');
                 <input class="g-slider" type="range" data-slider={f.key} min={lo} max={hi} step={f.slider} value={DEFAULTS[f.key]} aria-label={`${f.label} slider`} tabindex="-1" />
               )}
               <span class="g-hint">range {fmt(lo)} – {fmt(hi)}{f.unit ? ` ${f.unit}` : ''}{f.note ? ` · ${f.note}` : ''}</span>
+              {f.key === 'webScaleGly' && <span class="g-hint g-web-note" aria-live="polite" hidden></span>}
             </div>
           );
         })}

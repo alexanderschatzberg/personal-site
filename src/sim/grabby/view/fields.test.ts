@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { RANGES } from '../types';
-import { ADVANCED, BASIC, FIELDS, fromInput, TABS, toInput } from './fields';
+import { ADVANCED, BASIC, FIELDS, fromInput, TABS, toInput, webScaleNote } from './fields';
 
 describe('drawer fields', () => {
   it('covers every RANGES key except the hidden safety cap exactly once, including H0 and omegaLambda', () => {
@@ -65,5 +65,19 @@ describe('basic and advanced', () => {
 
   it('phone sheet tabs are basic · advanced', () => {
     expect(TABS).toEqual(['basic', 'advanced']);
+  });
+});
+
+describe('web scale note', () => {
+  it('shows the effective spacing when it differs from the set value by more than 10%', () => {
+    expect(webScaleNote(2, 93 / Math.sqrt(500))).toBe('effective ≈ 4.2 Gly at this galaxy count');
+    expect(webScaleNote(100, 31)).toBe('effective ≈ 31 Gly at this universe size');
+  });
+
+  it('says nothing within 10%', () => {
+    expect(webScaleNote(12, 12.02)).toBeNull();
+    expect(webScaleNote(10, 10.9)).toBeNull();
+    expect(webScaleNote(10, 9.1)).toBeNull();
+    expect(webScaleNote(10, 11.2)).not.toBeNull();
   });
 });

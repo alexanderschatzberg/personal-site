@@ -31,18 +31,25 @@ function dimOf(p: Params): number {
   return p.geometry === 'sphere' ? 2 : p.dim;
 }
 
+/** Area (2d, sphere) or volume (3d) of the domain the nuclei are scattered over. */
+function webMeasure(p: Params): number {
+  return p.geometry === 'sphere' ? 4 * Math.PI * (p.sizeGly / (2 * Math.PI)) ** 2 : Math.pow(p.sizeGly, p.dim);
+}
+
 /** Number of nuclei: domain measure / webScale^dim, at least 3^dim (so torus cells stay well
  *  under half the box) and at most galaxies / MIN_GALAXIES_PER_CELL. */
 export function nucleusCount(p: Params): number {
   const d = dimOf(p);
-  const measure =
-    p.geometry === 'sphere'
-      ? 4 * Math.PI * (p.sizeGly / (2 * Math.PI)) ** 2
-      : Math.pow(p.sizeGly, p.dim);
-  const ideal = Math.round(measure / Math.pow(p.webScaleGly, d));
+  const ideal = Math.round(webMeasure(p) / Math.pow(p.webScaleGly, d));
   const lo = Math.pow(3, d);
   const hi = Math.max(lo, Math.floor(p.galaxies / MIN_GALAXIES_PER_CELL));
   return Math.min(hi, Math.max(lo, ideal));
+}
+
+/** The mean nucleus spacing the run actually uses, (measure / nucleusCount)^(1/dim). Differs
+ *  from webScaleGly when the count is clamped (too few galaxies, or a small universe). */
+export function effectiveWebScaleGly(p: Params): number {
+  return Math.pow(webMeasure(p) / nucleusCount(p), 1 / dimOf(p));
 }
 
 /** Web nuclei (void centres), xyz per nucleus, from the web's own RNG stream. */

@@ -1,11 +1,12 @@
 // Page controller: reads params from the URL, runs the worker, drives the timeline,
 // the renderer, the drawer and the time bar.
 import { Space } from '../geometry';
+import { effectiveWebScaleGly } from '../structure';
 import { createTimeline } from '../timeline';
 import { DEFAULTS, RANGES, type Params, type SimResult, type Timeline } from '../types';
 import type { WorkerRequest, WorkerResponse } from '../worker';
 import { civName, currentMight, mightText, reuseLocalCount, temperamentWord, type LocalCountCache } from './civinfo';
-import { FIELDS, fmt, fromInput, TABS, toInput, type Tab } from './fields';
+import { FIELDS, fmt, fromInput, TABS, toInput, webScaleNote, type Tab } from './fields';
 import { HELP, placeTip } from './help';
 import { ADVANCED_KEY, readFlag, writeFlag } from './prefs';
 import { displayScale, formatA, physicalPerRendered, runScaleAt } from './growth';
@@ -239,6 +240,7 @@ export function mount(root: HTMLElement) {
     params = { ...params, ...next };
     if (params.dim === 3 && params.geometry === 'sphere') params.geometry = 'flat';
     syncBar();
+    syncWebNote(params);
     const q = paramsToQuery(params);
     history.replaceState(null, '', q ? `?${q}` : location.pathname);
     run();
@@ -496,7 +498,18 @@ export function mount(root: HTMLElement) {
       (input(f.key) as HTMLInputElement).disabled = off;
       input(f.key).closest('.g-field')?.toggleAttribute('data-off', off);
     }
+    syncWebNote({ ...params, ...readForm() });
   }
+
+  /** Under web scale: the spacing the run will really use, when the clamp moves it >10%. */
+  function syncWebNote(p: Params) {
+    const el = document.querySelector<HTMLElement>('.g-web-note');
+    if (!el) return;
+    const text = webScaleNote(p.webScaleGly, effectiveWebScaleGly(p));
+    el.textContent = text ?? '';
+    el.hidden = !text;
+  }
+
   form.addEventListener('input', (e) => {
     const sl = e.target as HTMLInputElement;
     if (sl.dataset?.slider) input(sl.dataset.slider).value = sl.value;
