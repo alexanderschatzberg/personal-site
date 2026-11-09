@@ -128,3 +128,90 @@ describe('nearestTo (round 4: nearest web nucleus of an arbitrary point)', () =>
     }
   });
 });
+
+describe('neighbour graph is connected (round 4: clustered galaxies)', () => {
+  /** Component count of a CSR graph. */
+  const components = (g: { start: Int32Array; adj: Int32Array }, n: number) => {
+    const seen = new Uint8Array(n);
+    let count = 0;
+    for (let s = 0; s < n; s++) {
+      if (seen[s]) continue;
+      count++;
+      const stack = [s];
+      seen[s] = 1;
+      while (stack.length) {
+        const i = stack.pop()!;
+        for (let q = g.start[i]; q < g.start[i + 1]; q++) {
+          const j = g.adj[q];
+          if (!seen[j]) {
+            seen[j] = 1;
+            stack.push(j);
+          }
+        }
+      }
+    }
+    return count;
+  };
+
+  it('bridges isolated clumps with their shortest links, keeping every kNN edge', () => {
+    for (const geometry of ['flat', 'torus'] as const) {
+      for (const dim of [2, 3] as const) {
+        // Four tight clumps of 30 points, far apart: the 8-NN graph alone has 4 components.
+        const rng = makeRng(`clumps-${geometry}-${dim}`);
+        const centres = [[10, 10, 10], [80, 15, 40], [20, 70, 70], [75, 80, 20]];
+        const pos = new Float32Array(3 * 120);
+        for (let i = 0; i < 120; i++) {
+          const c = centres[i % 4];
+          for (let k = 0; k < 3; k++) pos[3 * i + k] = k < dim ? c[k] + rng() * 2 : 0;
+        }
+        const space = new Space(pos, dim, geometry, 100);
+        const g = space.neighbours(8);
+        expect(components(g, 120)).toBe(1);
+        // Exactly 3 bridges were added on top of the symmetrised kNN pairs.
+        const knnPairs = new Set<number>();
+        for (let i = 0; i < 120; i++) {
+          const d = Array.from({ length: 120 }, (_, j) => j)
+            .filter((j) => j !== i)
+            .sort((a, b) => space.dist(i, a) - space.dist(i, b) || a - b)
+            .slice(0, 8);
+          for (const j of d) knnPairs.add(Math.min(i, j) * 120 + Math.max(i, j));
+        }
+        const pairs = new Set<number>();
+        for (let i = 0; i < 120; i++) {
+          for (let q = g.start[i]; q < g.start[i + 1]; q++) {
+            const j = g.adj[q];
+            pairs.add(Math.min(i, j) * 120 + Math.max(i, j));
+          }
+        }
+        for (const key of knnPairs) expect(pairs.has(key)).toBe(true);
+        expect(pairs.size - knnPairs.size).toBe(3);
+      }
+    }
+  });
+
+  it('uniform points that are already connected get no extra edges', () => {
+    const rng = makeRng('uniform-connected');
+    const pos = new Float32Array(3 * 2000);
+    for (let i = 0; i < 2000; i++) {
+      pos[3 * i] = rng() * 50;
+      pos[3 * i + 1] = rng() * 50;
+    }
+    const space = new Space(pos, 2, 'flat', 50);
+    const g = space.neighbours(8);
+    expect(components(g, 2000)).toBe(1);
+    // every edge of i is one of i's 8 nearest, or i is one of the other end's 8 nearest
+    const nearest = (i: number) => {
+      const best: [number, number][] = [];
+      for (let j = 0; j < 2000; j++) if (j !== i) best.push([space.dist(i, j), j]);
+      best.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+      return new Set(best.slice(0, 8).map((b) => b[1]));
+    };
+    for (let i = 0; i < 200; i++) {
+      const ni = nearest(i);
+      for (let q = g.start[i]; q < g.start[i + 1]; q++) {
+        const j = g.adj[q];
+        expect(ni.has(j) || nearest(j).has(i)).toBe(true);
+      }
+    }
+  });
+});

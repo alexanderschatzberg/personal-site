@@ -156,7 +156,13 @@ export class Space {
     return [c % gx, Math.floor(c / gx) % gy, Math.floor(c / (gx * gy))];
   }
 
-  /** k-nearest-neighbour graph under the metric, symmetrised. */
+  /**
+   * k-nearest-neighbour graph under the metric, symmetrised, plus the fewest shortest bridges
+   * that make it connected. Clustered positions (the cosmic web) can split the plain kNN graph
+   * into islands that no front could ever leave; each bridge is the shortest link between two
+   * components (Borůvka), so a uniform field, whose kNN graph is already connected, is
+   * unchanged.
+   */
   neighbours(kWanted: number): Graph {
     const n = this.n;
     const k = Math.max(0, Math.min(kWanted, n - 1));
@@ -210,12 +216,15 @@ export class Space {
       for (let m = 0; m < k; m++) knn[i * k + m] = bestI[m];
     }
 
-    // Symmetrise: i→j for every j in knn(i), and j→i.
+    const bridges = this.bridges(knn, k);
+
+    // Symmetrise: i→j for every j in knn(i), and j→i; bridges both ways.
     const deg = new Int32Array(n + 1);
     for (let i = 0; i < n; i++) {
       deg[i + 1] += k;
       for (let m = 0; m < k; m++) deg[knn[i * k + m] + 1]++;
     }
+    for (let b = 0; b < bridges.length; b++) deg[bridges[b] + 1]++;
     for (let i = 0; i < n; i++) deg[i + 1] += deg[i];
     const raw = new Int32Array(deg[n]);
     const fill = deg.slice(0, n);
@@ -225,6 +234,11 @@ export class Space {
         raw[fill[i]++] = j;
         raw[fill[j]++] = i;
       }
+    }
+    for (let b = 0; b < bridges.length; b += 2) {
+      const i = bridges[b], j = bridges[b + 1];
+      raw[fill[i]++] = j;
+      raw[fill[j]++] = i;
     }
     const start = new Int32Array(n + 1);
     const adj = new Int32Array(raw.length);
@@ -244,6 +258,77 @@ export class Space {
       for (let q = start[i]; q < start[i + 1]; q++) dist[q] = this.dist(i, adjOut[q]);
     }
     return { start, adj: adjOut, w: dist };
+  }
+
+  /**
+   * Borůvka on top of the kNN graph: while it has more than one component, link each
+   * component to its nearest point outside it. Returns the added pairs (i, j) flat.
+   */
+  private bridges(knn: Int32Array, k: number): number[] {
+    const n = this.n;
+    const parent = new Int32Array(n);
+    for (let i = 0; i < n; i++) parent[i] = i;
+    const find = (x: number): number => {
+      while (parent[x] !== x) {
+        parent[x] = parent[parent[x]];
+        x = parent[x];
+      }
+      return x;
+    };
+    let comps = n;
+    const union = (a: number, b: number): boolean => {
+      const ra = find(a), rb = find(b);
+      if (ra === rb) return false;
+      if (ra < rb) parent[rb] = ra;
+      else parent[ra] = rb;
+      comps--;
+      return true;
+    };
+    for (let i = 0; i < n; i++) for (let m = 0; m < k; m++) union(i, knn[i * k + m]);
+    const out: number[] = [];
+    if (comps <= 1) return out;
+
+    const maxG = Math.max(this.G[0], this.G[1], this.G[2]);
+    const rLimit = this.torus ? Math.ceil(maxG / 2) + 1 : maxG;
+    const items = this.cellItems;
+    const starts = this.cellStart;
+    const label = new Int32Array(n);
+    const bestD = new Float64Array(n);
+    const bestI = new Int32Array(n);
+    const bestJ = new Int32Array(n);
+    while (comps > 1) {
+      for (let i = 0; i < n; i++) label[i] = find(i);
+      bestD.fill(Infinity);
+      for (let i = 0; i < n; i++) {
+        const c = label[i];
+        const [cx, cy, cz] = this.cellCoords(i);
+        for (let r = 0; r <= rLimit; r++) {
+          // Points outside rings 0..r−1 are at least (r−1)·cw away.
+          const near = Math.max(0, r - 1) * this.cw;
+          if (near * near > bestD[c]) break;
+          this.visitCells(cx, cy, cz, r, r, (cell) => {
+            for (let q = starts[cell]; q < starts[cell + 1]; q++) {
+              const j = items[q];
+              if (label[j] === c) continue;
+              const d = this.rank2(i, j);
+              const lo = Math.min(i, j), hi = Math.max(i, j);
+              const blo = Math.min(bestI[c], bestJ[c]), bhi = Math.max(bestI[c], bestJ[c]);
+              // ties broken by the pair's indices, so the result is deterministic
+              if (d < bestD[c] || (d === bestD[c] && (lo < blo || (lo === blo && hi < bhi)))) {
+                bestD[c] = d;
+                bestI[c] = i;
+                bestJ[c] = j;
+              }
+            }
+          });
+        }
+      }
+      for (let c = 0; c < n; c++) {
+        if (label[c] !== c || bestD[c] === Infinity) continue;
+        if (union(bestI[c], bestJ[c])) out.push(bestI[c], bestJ[c]);
+      }
+    }
+    return out;
   }
 
   /**

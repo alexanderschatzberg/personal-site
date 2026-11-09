@@ -5,6 +5,7 @@
 import { makeCosmology } from './cosmology';
 import { Space } from './geometry';
 import { makeRng, normal } from './rng';
+import { applyCosmicWeb } from './structure';
 import { DEFAULTS, RANGES, REAL_GALAXIES } from './types';
 import type { Civ, CivEvent, OwnershipEvent, Params, SimResult } from './types';
 
@@ -130,6 +131,10 @@ export function simulate(input: Partial<Params>): SimResult {
       positions[3 * i + 2] = p.dim === 3 ? rng() * p.sizeGly : 0;
     }
   }
+
+  // Cosmic web (round 4): displaces the uniform draw; uses its own RNG stream, so the main
+  // stream continues identically at every clumpiness. clumpiness 0 leaves it untouched.
+  applyCosmicWeb(positions, p);
 
   // 4–5. Metric and neighbour graph.
   const space = new Space(positions, p.dim, p.geometry, p.sizeGly);
