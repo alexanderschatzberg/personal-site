@@ -1,0 +1,188 @@
+---
+import Base from '../../layouts/Base.astro';
+import { DEFAULTS, RANGES, TODAY_GYR } from '../../sim/grabby/types';
+import { FIELDS, fmt, toInput } from '../../sim/grabby/view/fields';
+
+const todayPct = (TODAY_GYR / DEFAULTS.tEndGyr) * 100;
+---
+<Base title="Grabby Aliens" description="A simulation of grabby civilizations spreading through a universe of galaxies." bare>
+  <div class="grabby" data-busy="true">
+    <div class="g-stage" aria-label="Simulation view" role="img"></div>
+
+    <header class="g-top">
+      <a class="g-home" href="/projects/">← zander schatzberg <span class="muted">~/projects/grabby-aliens</span></a>
+      <div class="g-bar" role="toolbar" aria-label="View">
+        <button class="btn" type="button" data-dim="2" aria-pressed="true">[2d]</button>
+        <button class="btn" type="button" data-dim="3" aria-pressed="false">[3d]</button>
+        <span class="sep" aria-hidden="true">·</span>
+        <button class="btn" type="button" data-geometry="flat" aria-pressed="true">[flat]</button>
+        <button class="btn" type="button" data-geometry="torus" aria-pressed="false">[torus]</button>
+        <button class="btn" type="button" data-geometry="sphere" aria-pressed="false" title="Sphere is 2d only">[sphere]</button>
+        <span class="sep" aria-hidden="true">·</span>
+        <button class="btn g-drawer-toggle" type="button" aria-expanded="false" aria-controls="g-params">[params]</button>
+        <button class="btn theme-toggle" type="button" aria-label="Toggle dark mode">[dark]</button>
+      </div>
+    </header>
+
+    <div class="g-readout" aria-live="off">
+      <span><span class="g-time">0.0</span> Gyr</span>
+      <span><span class="g-claimed">0</span>% of galaxies claimed</span>
+      <span><span class="g-alive">0</span> civilizations alive</span>
+      <span class="g-status" role="status" aria-live="polite"></span>
+    </div>
+
+    <aside class="g-drawer" id="g-params" aria-label="Parameters" hidden>
+      <form class="g-form" novalidate>
+        <span class="muted">── params</span>
+        {FIELDS.map((f) => {
+          const [lo, hi] = RANGES[f.key];
+          const id = `g-${f.key}`;
+          return (
+            <div class={`g-field g-${f.input}`} data-model={f.model}>
+              <label class="g-row" for={id}>
+                <span>{f.label}</span>
+                {f.input === 'range' && <output class="muted" for={id} data-out={f.key}></output>}
+              </label>
+              {f.input === 'range' ? (
+                <input id={id} name={f.key} type="range" min={lo} max={hi} step={f.step} value={toInput(DEFAULTS[f.key])} />
+              ) : (
+                <span class="g-num">
+                  <input id={id} name={f.key} class="field" type="number" inputmode="decimal" min={lo} max={hi} step={f.step} value={toInput(DEFAULTS[f.key])} />
+                  {f.unit && <span class="muted">{f.unit}</span>}
+                </span>
+              )}
+              {f.key === 'temperMean'
+                ? <span class="g-row g-hint"><span>peaceful · {fmt(lo)}</span><span>{fmt(hi)} · aggressive</span></span>
+                : <span class="g-hint">range {fmt(lo)} – {fmt(hi)}{f.unit ? ` ${f.unit}` : ''}</span>}
+            </div>
+          );
+        })}
+        <div class="g-field">
+          <label class="g-row" for="g-mightModel"><span>might model</span>
+            <select id="g-mightModel" name="mightModel" class="field">
+              <option value="power">power: base·N^α</option>
+              <option value="log">log: base·ln(1+N)</option>
+              <option value="frontier">frontier: nearby own</option>
+            </select>
+          </label>
+        </div>
+        <div class="g-field">
+          <label class="g-row" for="g-seed"><span>seed</span>
+            <input id="g-seed" name="seed" class="field" type="text" maxlength="64" spellcheck="false" autocomplete="off" value={DEFAULTS.seed} />
+          </label>
+        </div>
+        <div class="g-actions">
+          <button class="btn on" type="submit">[apply]</button>
+          <button class="btn g-reroll" type="button">[reroll]</button>
+        </div>
+      </form>
+    </aside>
+
+    <div class="g-time-bar">
+      <button class="btn g-restart" type="button" aria-label="Restart">[◀◀]</button>
+      <button class="btn on g-play" type="button" aria-label="Play">[▶]</button>
+      <button class="btn g-speed" type="button" aria-label="Change speed">[▶▶]</button>
+      <div class="g-scrub">
+        <input class="g-scrubber" type="range" min="0" max={DEFAULTS.tEndGyr} step="any" value="0" aria-label="Time in billions of years" />
+        <span class="g-today" style={`left: ${todayPct}%`} aria-hidden="true">today</span>
+      </div>
+      <span class="muted g-speed-label">1×</span>
+    </div>
+  </div>
+</Base>
+
+<script>
+  import { mount } from '../../sim/grabby/view/app';
+  const root = document.querySelector<HTMLElement>('.grabby');
+  if (root) mount(root);
+</script>
+
+<style is:global>
+  body.bare { overflow: hidden; }
+  .grabby {
+    position: relative;
+    height: 100dvh;
+    overflow: hidden;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  .grabby .g-stage { position: absolute; inset: 0; }
+  .grabby .g-stage canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+  .grabby a { color: var(--fg); }
+  .grabby .btn {
+    font: inherit; color: var(--muted); background: none; border: 0;
+    padding: 10px 0; margin: -10px 0; cursor: pointer;
+  }
+  .grabby .btn:hover { color: var(--fg); }
+  .grabby .btn.on, .grabby .btn[aria-pressed='true'] { color: var(--fg); font-weight: 500; }
+  .grabby .btn:disabled { opacity: 0.4; cursor: not-allowed; color: var(--muted); }
+  .grabby :focus-visible { outline: 1px solid var(--fg); outline-offset: 3px; border-radius: 2px; }
+  .grabby input[type='range'] { accent-color: var(--fg); margin: 0; width: 100%; }
+  .grabby .field {
+    font: inherit; color: var(--fg); background: transparent; border: 0;
+    border-bottom: 1px solid var(--rule); padding: 2px 0; text-align: right; border-radius: 0;
+  }
+  .grabby .field:disabled { color: var(--muted); }
+  .grabby select.field { text-align: left; max-width: 150px; }
+  .grabby select.field option { background: var(--bg); color: var(--fg); }
+  .grabby .g-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+  .grabby .sep { color: var(--rule); }
+
+  .grabby .g-top {
+    position: absolute; left: 0; right: 0; top: 0; padding: 24px 32px;
+    display: flex; justify-content: space-between; align-items: baseline;
+    gap: 16px; flex-wrap: wrap; font-size: 14px; pointer-events: none;
+  }
+  .grabby .g-top > * { pointer-events: auto; }
+  .grabby .g-home { font-weight: 500; }
+  .grabby .g-home:hover .muted { color: var(--fg); }
+  .grabby .g-bar { display: flex; gap: 18px; flex-wrap: wrap; align-items: baseline; }
+
+  .grabby .g-readout {
+    position: absolute; left: 32px; top: 76px; display: flex; flex-direction: column;
+    gap: 2px; font-size: 12px; color: var(--muted); pointer-events: none;
+  }
+  .grabby .g-time { color: var(--fg); font-size: 28px; font-variant-numeric: tabular-nums; }
+  .grabby .g-claimed, .grabby .g-alive { font-variant-numeric: tabular-nums; }
+  .grabby .g-status:empty { display: none; }
+
+  .grabby .g-drawer {
+    position: absolute; right: 0; top: 72px; bottom: 88px; width: 300px;
+    padding: 20px 32px 20px 24px; background: var(--bg); border-left: 1px solid var(--rule);
+    overflow-y: auto;
+  }
+  .grabby .g-drawer[hidden] { display: none; }
+  .grabby .g-form { display: flex; flex-direction: column; gap: 14px; }
+  .grabby .g-field { display: flex; flex-direction: column; gap: 2px; }
+  .grabby .g-number { flex-direction: row; flex-wrap: wrap; justify-content: space-between; align-items: baseline; column-gap: 12px; }
+  .grabby .g-number .g-num { display: flex; gap: 4px; align-items: baseline; }
+  .grabby .g-number .g-num .field { width: 84px; }
+  .grabby .g-number .g-hint { flex-basis: 100%; }
+  .grabby .g-hint { font-size: 11px; color: var(--muted); }
+  .grabby .g-field[data-off] > label { color: var(--muted); }
+  .grabby .g-actions { display: flex; gap: 16px; padding-top: 4px; }
+
+  .grabby .g-time-bar {
+    position: absolute; left: 32px; right: 32px; bottom: 28px;
+    display: flex; align-items: center; gap: 18px;
+  }
+  .grabby .g-scrub { flex: 1; position: relative; }
+  .grabby .g-today {
+    position: absolute; top: -18px; font-size: 11px; color: var(--muted);
+    transform: translateX(-50%); pointer-events: none;
+  }
+  .grabby .g-speed-label { min-width: 3ch; text-align: right; font-variant-numeric: tabular-nums; }
+  .grabby[data-busy='true'] .g-stage { opacity: 0.5; transition: opacity 0.2s; }
+
+  @media (max-width: 640px) {
+    .grabby .g-top { padding: 16px; }
+    .grabby .g-bar { gap: 12px; }
+    .grabby .g-readout { left: 16px; top: auto; bottom: 72px; }
+    .grabby .g-time { font-size: 22px; }
+    .grabby .g-drawer {
+      left: 0; width: auto; top: auto; bottom: 64px; max-height: 60dvh;
+      padding: 16px; border-left: 0; border-top: 1px solid var(--rule);
+    }
+    .grabby .g-time-bar { left: 16px; right: 16px; bottom: 16px; gap: 12px; }
+  }
+</style>

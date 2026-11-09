@@ -6,9 +6,11 @@ interface Props {
   title?: string;
   description?: string;
   path?: string; // shown after the name, e.g. "writing"
+  /** Leave out the site header and column so the page can fill the window. */
+  bare?: boolean;
 }
 
-const { title, description = SITE.description, path = '' } = Astro.props;
+const { title, description = SITE.description, path = '', bare = false } = Astro.props;
 const pageTitle = title ? `${title} — ${SITE.name}` : SITE.name;
 const current = Astro.url.pathname;
 const nav = [
@@ -41,7 +43,8 @@ const nav = [
       })();
     </script>
   </head>
-  <body>
+  <body class:list={[{ bare }]}>
+    {bare ? <slot /> : (
     <div class="shell">
       <header class="site-header">
         <a class="home-link" href="/">
@@ -61,6 +64,7 @@ const nav = [
         <slot />
       </main>
     </div>
+    )}
 
     <script is:inline>
       (function () {
