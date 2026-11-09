@@ -83,3 +83,48 @@ describe('neighbour graph', () => {
     expect(s.countWithin(0, 1.5, owner, 7)).toBe(3);
   });
 });
+
+describe('nearestTo (round 4: nearest web nucleus of an arbitrary point)', () => {
+  it('matches brute force on flat, torus and sphere in 2d and 3d', () => {
+    const cases = [
+      { dim: 2 as const, geometry: 'flat' as const },
+      { dim: 2 as const, geometry: 'torus' as const },
+      { dim: 3 as const, geometry: 'flat' as const },
+      { dim: 3 as const, geometry: 'torus' as const },
+      { dim: 2 as const, geometry: 'sphere' as const },
+    ];
+    for (const { dim, geometry } of cases) {
+      const size = 50;
+      const rng = makeRng(`near-${dim}-${geometry}`);
+      const R = size / (2 * Math.PI);
+      const point = (): [number, number, number] => {
+        if (geometry === 'sphere') {
+          const z = 2 * rng() - 1;
+          const phi = 2 * Math.PI * rng();
+          const rho = Math.sqrt(1 - z * z);
+          return [R * rho * Math.cos(phi), R * rho * Math.sin(phi), R * z];
+        }
+        return [rng() * size, rng() * size, dim === 3 ? rng() * size : 0];
+      };
+      const m = 300;
+      const pos = new Float32Array(3 * m);
+      for (let i = 0; i < m; i++) pos.set(point(), 3 * i);
+      const space = new Space(pos, dim, geometry, size);
+      const d2 = (q: number[], j: number) => {
+        let s = 0;
+        for (let k = 0; k < 3; k++) {
+          let d = Math.abs(q[k] - pos[3 * j + k]);
+          if (geometry === 'torus' && d > size / 2) d = size - d;
+          s += d * d;
+        }
+        return s;
+      };
+      for (let t = 0; t < 400; t++) {
+        const q = point();
+        let best = 0;
+        for (let j = 1; j < m; j++) if (d2(q, j) < d2(q, best)) best = j;
+        expect(d2(q, space.nearestTo(q[0], q[1], q[2]))).toBe(d2(q, best));
+      }
+    }
+  });
+});

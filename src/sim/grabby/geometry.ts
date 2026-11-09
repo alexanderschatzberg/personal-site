@@ -246,6 +246,50 @@ export class Space {
     return { start, adj: adjOut, w: dist };
   }
 
+  /**
+   * Index of the stored point nearest to (x, y, z) under the ranking metric (Euclidean,
+   * minimum-image on the torus, chord on the sphere, which ranks like great-circle distance).
+   * The query must lie in the domain: [0, size]^dim, or on the sphere surface. -1 if empty.
+   */
+  nearestTo(x: number, y: number, z: number): number {
+    if (this.n === 0) return -1;
+    const cx = this.axisCell(x, 0);
+    const cy = this.axisCell(y, 1);
+    const cz = this.G[2] === 1 ? 0 : this.axisCell(z, 2);
+    const maxG = Math.max(this.G[0], this.G[1], this.G[2]);
+    const rLimit = this.torus ? Math.ceil(maxG / 2) + 1 : maxG;
+    const p = this.pos;
+    const s = this.size;
+    const items = this.cellItems;
+    const starts = this.cellStart;
+    let best = -1;
+    let bestD = Infinity;
+    for (let r = 0; r <= rLimit; r++) {
+      this.visitCells(cx, cy, cz, r, r, (cell) => {
+        for (let q = starts[cell]; q < starts[cell + 1]; q++) {
+          const j = items[q];
+          let dx = Math.abs(x - p[3 * j]);
+          let dy = Math.abs(y - p[3 * j + 1]);
+          let dz = Math.abs(z - p[3 * j + 2]);
+          if (this.torus) {
+            if (dx > s / 2) dx = s - dx;
+            if (dy > s / 2) dy = s - dy;
+            if (dz > s / 2) dz = s - dz;
+          }
+          const d = dx * dx + dy * dy + dz * dz;
+          if (d < bestD || (d === bestD && j < best)) {
+            bestD = d;
+            best = j;
+          }
+        }
+      });
+      // Every point outside rings 0..r is at least r·cw away.
+      const reach = r * this.cw;
+      if (best >= 0 && bestD <= reach * reach) break;
+    }
+    return best;
+  }
+
   /** Number of galaxies j with owner[j] === civ and dist(g, j) <= radius (g included). */
   countWithin(g: number, radius: number, owner: Int32Array, civ: number): number {
     let search = radius;
