@@ -42,3 +42,8 @@ export function fmt(v: number): string {
   }
   return Number.isInteger(v) ? v.toLocaleString('en-US') : String(Number(v.toPrecision(4)));
 }
+
+/** Value for an <input type=number>: like fmt, but without thousands separators. */
+export function toInput(v: number): string {
+  return v !== 0 && (Math.abs(v) >= 1e6 || Math.abs(v) < 1e-3) ? fmt(v) : String(v);
+}
