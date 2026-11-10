@@ -1,7 +1,7 @@
 # pm log: grabby aliens simulation
 
 Branch: `pm/grabby-aliens` · Plan: `plan.md` · Started: 2026-11-09
-State: awaiting merge OK
+State: round 7 implementing (3D shells)
 
 ## For the user
 
@@ -118,3 +118,4 @@ State: awaiting merge OK
   - Perf, min of 3 under load: 3D 100k 471 ms, 3D 1M 5.3 s (12% headroom), 2D 1M 4.0 s.
   - The PM killed an orphaned vitest worker (PID 69427, 2 h at 100% CPU, left by an earlier agent run). It probably caused one load-induced timeout in U12's second full run.
   - Gate re-run by the PM: all green.
+- 2026-11-10 Round 7: The user found 3D boundaries unclear. Three options were proposed (shells, screen-space outlines, slicer); the user chose 1, translucent territory shells. They use marching cubes in a dedicated worker, a fresnel rim and a shell-hit pick. U13 is one agent on the feature branch.

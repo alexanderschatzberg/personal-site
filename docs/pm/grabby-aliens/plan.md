@@ -481,3 +481,48 @@ The user chose a 3D default of 100k. The contract gained `DEFAULT_GALAXIES_3D = 
     The other round-5 thresholds stay, as minimum of 3. This is a spec change, so it is not a weakening.
 47. **ψ sign is tested.** The correlation between ∇·ψ and δ must be negative, so matter converges on overdensities. The test must fail if ψ's sign is flipped; check this once by mutation.
 48. **Edge-strip criterion clarified by the PM.** Criterion 40's "±20%" means the mean over seeds; single seeds vary through cosmic variance. The existing test already does this (mean ±20%, each seed ±35%). Leave it, and record the clarification here.
+
+---
+
+# Round 7: translucent territory shells in 3D (U13, one agent, view only)
+
+The user found civ boundaries unclear in 3D and chose option 1 of three proposals: **translucent territory shells**. Each civilization gets a smooth, see-through surface around its galaxies, in its colour, with a stronger glow at grazing angles so overlapping shells stay distinct.
+
+## Acceptance criteria (round 7)
+
+49. **Where shells apply.** Shells are used in **3D (flat and 3-torus)** whenever `[borders]` is on. They replace the 3D translucent border patches. 2D, the globe and the donut are unchanged.
+50. **Computation:**
+    - **Per-civ density field.** On a cubic grid with G cells per side (default 48, choose 32–64 by galaxy count, then log the choice), splat each owned galaxy into its owner's channel with cloud-in-cell weights.
+    - **Blur.** Apply a separable Gaussian blur, σ ≈ 1–1.5 cells.
+    - **Surfaces.** Extract an isosurface per civ with **marching cubes** at a level chosen so the shell hugs the civ's galaxies. Pick a level relative to the mean blurred density of one galaxy; document it.
+    - **Normals** come from the field gradient, which gives a smooth surface.
+    - **3D torus.** The field is periodic: splat and blur wrap. The surface is extracted on the periodic grid and cut at the cube faces, so a territory crossing a face shows on both sides.
+    - **Where it runs.** All of this runs in a **dedicated shell worker** (`view/shellWorker.ts`). It receives positions once per run, and an `Int32Array` owner snapshot plus the civ count on each update. It returns per-civ position and normal Float32Arrays as transferables.
+    - **Latest wins.** While a job runs, only the newest pending snapshot is kept and older ones are dropped.
+    - **Cost.** The main thread does no O(grid) work.
+51. **Rendering:**
+    - one Mesh per civ in its palette colour
+    - a custom or onBeforeCompile material with a fresnel rim: opacity ~0.12 face-on, rising to ~0.5 at grazing angles
+    - `depthWrite: false`, double-sided, sorted back to front by civ centroid
+    - shells sit inside the same transformed group as the points, so expansion scale, rotation, zoom and pan apply
+    - theme changes recolour them
+    - galaxies stay visible through the shells
+    - new shells crossfade in over about 150 ms, so updates don't pop
+    - during playback the shells update as fast as the worker returns
+    - when paused, the shell for the current time is always exact
+    - display constants are logged
+52. **Picking:**
+    - In 3D, a click or tap that hits any shell, front-most hit first by three Raycaster, opens that civ's card for the owned galaxy nearest the hit point.
+    - If no shell is hit, the existing owned-galaxy pick applies.
+    - Unclaimed galaxies still never open.
+53. **Performance.** At the 3D default (100k galaxies, ~20 civs, G = 48), one shell job takes ≤ 50 ms in Node; report the measurement. Playback frame rate on the main thread is unaffected because the work is in the worker. Memory is bounded: old geometries are disposed.
+54. **Tests (vitest, pure modules):**
+    - Marching cubes on an analytic sphere field: watertight, meaning every edge is shared by two triangles, on a non-periodic grid with the field zero at the borders. Surface area is within 5% of 4πr².
+    - Periodic blur and splat conserve mass and wrap correctly.
+    - Torus extraction: a blob at a corner produces surface on every face it crosses.
+    - The latest-wins job queue drops stale snapshots.
+    - Pick prefers the front-most shell hit.
+    - A deterministic fixture: the same owner snapshot gives identical triangle counts.
+55. **Gate:** `npm test` and `npm run build` pass, with no test weakened.
+
+U13 owns `view/**`, `worker.ts` (untouched unless needed) and `grabby-aliens.astro`. It must not change types.ts or the engine.
