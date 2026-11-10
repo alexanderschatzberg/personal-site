@@ -1,7 +1,8 @@
 // three.js view of a SimResult: one Points cloud with per-vertex colour, plus borders.
 // 2d flat: orthographic, top-down (drag pans, wheel/pinch zooms at the cursor).
 // Sphere: perspective globe. 2d torus: perspective donut (see donut.ts; the sim metric stays the
-// flat torus). 3d: perspective cube, dashed when its faces wrap. These orbit on drag, dolly on
+// flat torus). 3d: perspective cube, dashed when its faces wrap, with translucent territory shells
+// as its borders (shellLayer.ts). These orbit on drag, dolly on
 // wheel/pinch and pan on right-drag or shift-drag. The universe is drawn at its comoving
 // positions × the display scale d(t) = min(a, 1) (a scale on a group; the position buffer is
 // never rewritten), and the user's zoom and pan multiply on top.
@@ -9,12 +10,14 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { SimResult, Timeline } from '../types';
-import { BorderSet, SEGMENT_FRACTION, slotFrame, slotSegment, type Space } from './borders';
+import { BorderSet, slotFrame, slotSegment, type Space } from './borders';
 import { civColor } from './palette';
 import { MAX_PIXEL_RATIO } from './phone';
 import { dotStyle } from './dots';
 import { donutRadii, donutSegment, embedPositions } from './donut';
 import { pickOwnedNear, projectForPick, ScreenGrid, torusVisible, type Facing } from './pick';
+import { ShellLayer } from './shellLayer';
+import { pickShellHit } from './shells';
 import { updateRanges } from './ranges';
 import { pendingRangeCap, UploadTracker } from './upload';
 
@@ -22,8 +25,6 @@ const css = (name: string) => getComputedStyle(document.documentElement).getProp
 const isDark = () => document.documentElement.dataset.theme === 'dark';
 /** Smallest rendered scale: a = 0 would collapse the group to a singular matrix. */
 const MIN_SCALE = 1e-4;
-/** Opacity of the 3d border patches. */
-const PATCH_OPACITY = 0.15;
 /** The background-coloured occluders sit this fraction inside the globe / donut surface. */
 const OCCLUDER_SHRINK = 0.985;
 
@@ -42,13 +43,13 @@ function dotTexture() {
 
 
 /**
- * Border drawing. 2d and sphere: one LineSegments (2 vertices per active slot). 3d: one
- * InstancedMesh of translucent quads perpendicular to the edge. Buffers grow by doubling up to
- * edges × 2 slots, and the draw range is the active count.
+ * Border drawing in 2d, on the sphere and on the donut: one LineSegments (2 vertices per active
+ * slot). Buffers grow by doubling up to edges × 2 slots, and the draw range is the active count.
+ * (3d draws territory shells instead: see ShellLayer.)
  */
 class BorderLayer {
   readonly set: BorderSet;
-  object?: THREE.LineSegments | THREE.InstancedMesh;
+  object?: THREE.LineSegments;
   /** Pending GPU uploads of the object's per-slot attributes, with floats per slot. */
   private uploads: [UploadTracker, number][] = [];
   private capacity = 0;
@@ -56,13 +57,6 @@ class BorderLayer {
   private frame = new Float64Array(7);
   private seg = new Float64Array(6);
   private mapped = new Float64Array(6);
-  private m = new THREE.Matrix4();
-  private q = new THREE.Quaternion();
-  private dir = new THREE.Vector3();
-  private z = new THREE.Vector3(0, 0, 1);
-  private at = new THREE.Vector3();
-  private size = new THREE.Vector3();
-  private patches: boolean;
 
   constructor(
     private parent: THREE.Object3D,
@@ -75,7 +69,6 @@ class BorderLayer {
     private mapSegment?: (seg: Float64Array, out: Float64Array) => void,
   ) {
     this.set = new BorderSet(edges, positions.length / 3, nBridges);
-    this.patches = space.dim === 3;
   }
 
   /** Make room for n slots. Returns true if the buffers were rebuilt (all must be rewritten). */
@@ -86,26 +79,14 @@ class BorderLayer {
     cap = Math.min(cap, this.set.edges.length);
     this.disposeObject();
     this.capacity = cap;
-    if (this.patches) {
-      const mat = new THREE.MeshBasicMaterial({ transparent: true, opacity: PATCH_OPACITY, side: THREE.DoubleSide, depthWrite: false });
-      const mesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), mat, cap);
-      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-      mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3), 3);
-      mesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
-      mesh.frustumCulled = false;
-      mesh.count = 0;
-      this.object = mesh;
-      this.uploads = [[new UploadTracker(mesh.instanceMatrix), 16], [new UploadTracker(mesh.instanceColor), 3]];
-    } else {
-      const geo = new THREE.BufferGeometry();
-      geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(cap * 6), 3).setUsage(THREE.DynamicDrawUsage));
-      geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(cap * 6), 3).setUsage(THREE.DynamicDrawUsage));
-      geo.setDrawRange(0, 0);
-      const lines = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ vertexColors: true }));
-      lines.frustumCulled = false;
-      this.object = lines;
-      this.uploads = ['position', 'color'].map((name): [UploadTracker, number] => [new UploadTracker(geo.getAttribute(name) as THREE.BufferAttribute), 6]);
-    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(cap * 6), 3).setUsage(THREE.DynamicDrawUsage));
+    geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(cap * 6), 3).setUsage(THREE.DynamicDrawUsage));
+    geo.setDrawRange(0, 0);
+    const lines = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ vertexColors: true }));
+    lines.frustumCulled = false;
+    this.object = lines;
+    this.uploads = ['position', 'color'].map((name): [UploadTracker, number] => [new UploadTracker(geo.getAttribute(name) as THREE.BufferAttribute), 6]);
     this.object.visible = this.visible;
     this.parent.add(this.object);
     return true;
@@ -134,14 +115,7 @@ class BorderLayer {
     const f = this.frame;
     slotFrame(this.positions, this.set.edges, slot, this.space, f);
     const col = this.colorOf(civ);
-    if (this.object instanceof THREE.InstancedMesh) {
-      this.dir.set(f[3], f[4], f[5]);
-      this.q.setFromUnitVectors(this.z, this.dir);
-      const s = SEGMENT_FRACTION * f[6];
-      this.m.compose(this.at.set(f[0], f[1], f[2]), this.q, this.size.set(s, s, 1));
-      this.object.setMatrixAt(k, this.m);
-      this.object.setColorAt(k, col);
-    } else if (this.object) {
+    if (this.object) {
       slotSegment(f, this.space, this.seg);
       if (this.mapSegment) this.mapSegment(this.seg, this.mapped);
       const geo = this.object.geometry;
@@ -159,8 +133,7 @@ class BorderLayer {
   /** Set the draw range and upload [lo, hi] of the written entries (with any still pending). */
   private commit(lo: number, hi: number) {
     const n = this.set.activeCount;
-    if (this.object instanceof THREE.InstancedMesh) this.object.count = n;
-    else if (this.object) this.object.geometry.setDrawRange(0, n * 2);
+    if (this.object) this.object.geometry.setDrawRange(0, n * 2);
     if (hi < lo) return;
     for (const [up, size] of this.uploads) up.markRange(lo * size, (hi - lo + 1) * size);
   }
@@ -175,7 +148,6 @@ class BorderLayer {
     this.object.removeFromParent();
     this.object.geometry.dispose();
     (this.object.material as THREE.Material).dispose();
-    if (this.object instanceof THREE.InstancedMesh) this.object.dispose();
     this.object = undefined;
     this.uploads = [];
   }
@@ -204,6 +176,11 @@ export class Renderer {
   private outline?: THREE.LineSegments;
   private occluder?: THREE.Mesh;
   private borders?: BorderLayer;
+  /** 3d: territory shells instead of border lines. */
+  private shells?: ShellLayer;
+  /** The timeline's live owner array, for re-sending a snapshot when borders come back on. */
+  private owner?: Int32Array;
+  private raycaster = new THREE.Raycaster();
   /** 2d torus: galaxy positions on the donut and their outward normals. */
   private donut?: { world: Float32Array; normals: Float32Array };
   private bordersOn = true;
@@ -312,8 +289,13 @@ export class Renderer {
     const space: Space = { dim, geometry, sizeGly: L };
     const { R, r: tube } = donutRadii(L);
     const map = donut ? (seg: Float64Array, out: Float64Array) => donutSegment(seg, L, R, tube, out) : undefined;
-    this.borders = new BorderLayer(this.content, r.positions, r.edges, r.nBridges ?? 0, space, (c) => this.civColor(c), map);
-    this.borders.setVisible(this.bordersOn);
+    if (dim === 3) {
+      this.shells = new ShellLayer(this.content, r, (c) => this.civColor(c), this.reducedMotion, () => this.request());
+      this.shells.setVisible(this.bordersOn);
+    } else {
+      this.borders = new BorderLayer(this.content, r.positions, r.edges, r.nBridges ?? 0, space, (c) => this.civColor(c), map);
+      this.borders.setVisible(this.bordersOn);
+    }
 
     this.resize();
     this.setupControls(dim === 2 && !sphere && !donut);
@@ -372,6 +354,8 @@ export class Renderer {
     const c = this.colors;
     if (!c || !this.points) return;
     this.borders?.update(tl.owner, full ? null : tl.changed, tl.changedCount, full);
+    this.owner = tl.owner;
+    if (this.shells && this.bordersOn && (full || tl.changedCount > 0)) this.shells.submit(tl.owner, this.result!.civs.length);
     const up = this.colorUpload!;
     const ranges = full ? null : updateRanges(tl.changed, tl.changedCount, tl.owner.length, 3);
     if (!ranges || ranges.length > 0) {
@@ -402,6 +386,8 @@ export class Renderer {
   setBorders(on: boolean) {
     this.bordersOn = on;
     this.borders?.setVisible(on);
+    this.shells?.setVisible(on);
+    if (on && this.shells && this.owner && this.result) this.shells.submit(this.owner, this.result.civs.length);
     this.request();
   }
 
@@ -422,10 +408,17 @@ export class Renderer {
     if (!r || !this.points) return -1;
     this.scene.updateMatrixWorld();
     this.camera.updateMatrixWorld();
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    // 3d: a tap on a shell (front-most hit first) opens that civ, at its galaxy nearest the hit.
+    if (this.shells && this.bordersOn && rect.width > 0 && rect.height > 0) {
+      const ndc = new THREE.Vector2(((clientX - rect.left) / rect.width) * 2 - 1, -(((clientY - rect.top) / rect.height) * 2 - 1));
+      this.raycaster.setFromCamera(ndc, this.camera);
+      const g = pickShellHit(this.shells.hits(this.raycaster), r.positions, owner, r.params.sizeGly, r.params.geometry === 'torus');
+      if (g >= 0) return g;
+    }
     const viewProj = new THREE.Matrix4().multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse).elements;
     const model = this.content.matrixWorld.elements;
     const cam = this.camera.position;
-    const rect = this.renderer.domElement.getBoundingClientRect();
     const key = Float64Array.from([...model, ...viewProj, cam.x, cam.y, cam.z, rect.left, rect.top, rect.width, rect.height]);
     const c = this.pickCache;
     if (!c || c.key.length !== key.length || c.key.some((v, i) => v !== key[i])) {
@@ -464,6 +457,7 @@ export class Renderer {
     this.civColors = (this.result?.civs ?? []).map((c) => new THREE.Color(civColor(c.id, dark)));
     if (this.outline) (this.outline.material as THREE.LineBasicMaterial).color.setStyle(css('--rule'));
     if (this.occluder) (this.occluder.material as THREE.MeshBasicMaterial).color.setStyle(css('--bg'));
+    this.shells?.recolor();
     this.applyDots(dark);
     this.request();
   }
@@ -501,12 +495,15 @@ export class Renderer {
   /** Ask for one frame. Frames keep coming only while the globe/cube auto-spins. */
   request() {
     if (this.frame || document.hidden) return;
-    this.frame = requestAnimationFrame(() => {
+    this.frame = requestAnimationFrame((now) => {
       this.frame = 0;
       // With autoRotate on, update() moves the camera and its 'change' asks for the next frame.
       if (this.controls?.autoRotate) this.controls.update();
+      const fading = this.shells?.tick(now) ?? false;
+      this.shells?.sort(this.camera);
       this.renderer.render(this.scene, this.camera);
       this.onView?.();
+      if (fading) this.request();
     });
   }
 
@@ -518,6 +515,9 @@ export class Renderer {
   private disposeScene() {
     this.borders?.dispose();
     this.borders = undefined;
+    this.shells?.dispose();
+    this.shells = undefined;
+    this.owner = undefined;
     for (const o of [this.points, this.outline, this.occluder]) {
       if (!o) continue;
       o.removeFromParent();

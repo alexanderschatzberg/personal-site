@@ -193,3 +193,10 @@ export function pickShellHit(hits: ShellHit[], positions: ArrayLike<number>, own
   }
   return -1;
 }
+
+/** Display: shell opacity face-on and at grazing angles (fresnel rim), the rim's falloff power,
+ *  and the crossfade time for a new shell. */
+export const SHELL_FACE_OPACITY = 0.12;
+export const SHELL_RIM_OPACITY = 0.5;
+export const SHELL_RIM_POWER = 2.5;
+export const SHELL_FADE_MS = 150;
