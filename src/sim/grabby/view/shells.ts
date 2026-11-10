@@ -49,8 +49,25 @@ export interface CivShell {
   /** Triangle soup in the galaxies' own (comoving) coordinates, 9 floats per triangle. */
   positions: Float32Array;
   normals: Float32Array;
-  /** Mean vertex, for back-to-front sorting. */
+  /** Mean vertex. */
   centroid: [number, number, number];
+  /** Connected pieces of the surface (a torus shell cut by a face falls apart into several),
+   *  each with its mean vertex and vertex count, largest first. Back-to-front sorting uses these
+   *  (shellSortKey), not the overall mean, which for a cut shell lands between its pieces. */
+  pieces: { centroid: [number, number, number]; weight: number }[];
+}
+
+/**
+ * Sort key for drawing shells back to front: squared distance from `cam` (in the galaxies' own
+ * coordinates) to the nearest piece's centroid. A shell with pieces on both sides of the cube is
+ * drawn as near as its nearest piece, since that is the piece seen through the fewest other
+ * shells, where a wrong order shows most; its far piece, behind most of them, gets the error.
+ */
+export function shellSortKey(s: Pick<CivShell, 'pieces' | 'centroid'>, cam: ArrayLike<number>): number {
+  const list = s.pieces.length ? s.pieces : [{ centroid: s.centroid, weight: 1 }];
+  let best = Infinity;
+  for (const { centroid: c } of list) best = Math.min(best, (c[0] - cam[0]) ** 2 + (c[1] - cam[1]) ** 2 + (c[2] - cam[2]) ** 2);
+  return best;
 }
 
 /**
@@ -97,6 +114,54 @@ export class ShellBuilder {
     this.top1 = new Float32Array(G * G * G);
     this.top2 = new Float32Array(G * G * G);
     this.arg = new Int32Array(G * G * G);
+  }
+
+  /** Vertex key → union-find slot (−1 = unseen), and the union-find parents. Scratch. */
+  private slot = new Int32Array(0);
+  private parent = new Int32Array(0);
+
+  /** Connected pieces of a triangle soup whose vertices carry grid-edge keys (see extract). */
+  private pieces(positions: Float32Array, keys: Int32Array): CivShell['pieces'] {
+    const G1 = this.opts.G + 1;
+    if (this.slot.length < 3 * G1 * G1 * G1) this.slot = new Int32Array(3 * G1 * G1 * G1).fill(-1);
+    const nv = keys.length;
+    if (this.parent.length < nv) this.parent = new Int32Array(nv);
+    const { slot, parent } = this;
+    // One union-find node per distinct key; id[v] is vertex v's node.
+    const id = new Int32Array(nv);
+    let nodes = 0;
+    for (let v = 0; v < nv; v++) {
+      let s = slot[keys[v]];
+      if (s < 0) {
+        s = slot[keys[v]] = nodes;
+        parent[nodes] = nodes;
+        nodes++;
+      }
+      id[v] = s;
+    }
+    const find = (x: number) => {
+      while (parent[x] !== x) x = parent[x] = parent[parent[x]];
+      return x;
+    };
+    for (let v = 0; v < nv; v += 3) {
+      const a = find(id[v]);
+      for (let e = 1; e < 3; e++) {
+        const b = find(id[v + e]);
+        if (a !== b) parent[b] = a;
+      }
+    }
+    for (let v = 0; v < nv; v++) slot[keys[v]] = -1;
+    const byRoot = new Map<number, { centroid: [number, number, number]; weight: number }>();
+    for (let v = 0; v < nv; v++) {
+      const r = find(id[v]);
+      let p = byRoot.get(r);
+      if (!p) byRoot.set(r, (p = { centroid: [0, 0, 0], weight: 0 }));
+      for (let a = 0; a < 3; a++) p.centroid[a] += positions[3 * v + a];
+      p.weight++;
+    }
+    const out = [...byRoot.values()];
+    for (const p of out) for (let a = 0; a < 3; a++) p.centroid[a] /= p.weight;
+    return out.sort((a, b) => b.weight - a.weight);
   }
 
   /**
@@ -157,12 +222,13 @@ export class ShellBuilder {
       });
       inspect?.(c, f, 0);
       extract(f, 0, this.h, this.margin, this.mesh);
+      const keys = this.mesh.keys();
       const { positions, normals } = this.mesh.take();
       if (positions.length === 0) continue;
       const centroid: [number, number, number] = [0, 0, 0];
       for (let v = 0; v < positions.length; v += 3) for (let a = 0; a < 3; a++) centroid[a] += positions[v + a];
       for (let a = 0; a < 3; a++) centroid[a] /= positions.length / 3;
-      out.push({ civ: c, positions, normals, centroid });
+      out.push({ civ: c, positions, normals, centroid, pieces: this.pieces(positions, keys) });
     }
     return out;
   }

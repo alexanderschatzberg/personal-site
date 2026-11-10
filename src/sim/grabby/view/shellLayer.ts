@@ -15,6 +15,7 @@ import {
   SHELL_RIM_OPACITY,
   SHELL_RIM_POWER,
   SHARED_WALL_DRAWN_TWICE,
+  shellSortKey,
   type CivShell,
   type ShellHit,
 } from './shells';
@@ -87,7 +88,8 @@ interface Shown {
 interface CivMeshes {
   cur?: Shown;
   old?: Shown;
-  centroid: [number, number, number];
+  /** Where the current shell is, for sorting (see shellSortKey). */
+  at: Pick<CivShell, 'centroid' | 'pieces'>;
 }
 
 export class ShellLayer {
@@ -187,8 +189,9 @@ export class ShellLayer {
   /** New geometry for a civ. A shell still fading in just takes it; a settled one crossfades to it. */
   private show(s: CivShell) {
     let m = this.civs.get(s.civ);
-    if (!m) this.civs.set(s.civ, (m = { centroid: s.centroid }));
-    m.centroid = s.centroid;
+    const at = { centroid: s.centroid, pieces: s.pieces };
+    if (!m) this.civs.set(s.civ, (m = { at }));
+    m.at = at;
     if (m.cur && m.cur.target === 1 && m.cur.fade < 1) {
       const geo = m.cur.mesh.geometry;
       m.cur.mesh.geometry = this.makeGeometry(s);
@@ -248,16 +251,15 @@ export class ShellLayer {
     return moving;
   }
 
-  /** Draw order back to front by each civ's centroid distance from the camera (after the points and their depth pass). */
+  /** Draw order back to front by each civ's nearest piece from the camera (after the points and their depth pass). */
   sort(camera: THREE.Camera) {
     if (!this.visible) return;
-    const cam = camera.position;
+    this.group.updateWorldMatrix(true, false);
+    // The camera in the galaxies' own coordinates (the group's scale is uniform, so order holds).
+    const cam = this.group.worldToLocal(this.v.copy(camera.position));
+    const camXYZ = [cam.x, cam.y, cam.z];
     const order: [number, CivMeshes][] = [];
-    for (const m of this.civs.values()) {
-      this.v.set(m.centroid[0], m.centroid[1], m.centroid[2]);
-      this.group.localToWorld(this.v);
-      order.push([this.v.distanceToSquared(cam), m]);
-    }
+    for (const m of this.civs.values()) order.push([shellSortKey(m.at, camXYZ), m]);
     order.sort((a, b) => b[0] - a[0]);
     order.forEach(([, m], i) => {
       if (m.old) m.old.mesh.renderOrder = shellRenderOrder(i, 'old');

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { gaussianKernel, gridSpec, KERNEL_RADIUS, SIGMA_CELLS } from './shellfield';
-import { choosePick, ISO_FRACTION, isoLevel, LatestWins, oneGalaxyLevel, pickShellHit, ShellBuilder, type CivShell, type ShellHit } from './shells';
+import { choosePick, ISO_FRACTION, shellSortKey, isoLevel, LatestWins, oneGalaxyLevel, pickShellHit, ShellBuilder, type CivShell, type ShellHit } from './shells';
 
 /** Small deterministic PRNG (mulberry32). */
 function rng(seed: number) {
@@ -212,6 +212,37 @@ describe('shared walls (round 7 review, finding 1)', () => {
       expect(aPast).toBe(0);
       expect(bPast).toBe(0);
     });
+});
+
+describe('sort centroids per piece (round 7 review, finding 4)', () => {
+  const L = 100;
+  const { positions, owner } = fixture(6000, L, 11);
+
+  it('torus: a territory cut by a face has one piece on each side, each with its own centroid', () => {
+    const across = Int32Array.from({ length: owner.length }, (_, i) => (positions[3 * i] < 15 || positions[3 * i] > L - 15 ? 0 : -1));
+    const [s] = new ShellBuilder(positions, { L, G: 32, periodic: true }).build(across, 1);
+    // The mean of both halves lands near the middle of the cube, where the territory isn't.
+    expect(Math.abs(s.centroid[0] - L / 2)).toBeLessThan(L / 4);
+    // The slab spans the whole cube in y and z, so it is cut by those faces too, but those cuts
+    // don't separate it: two pieces, left (x < 25) and right (x > 75).
+    expect(s.pieces.length).toBe(2);
+    const xs = s.pieces.map((p) => p.centroid[0]).sort((a, b) => a - b);
+    expect(xs[0]).toBeLessThan(L / 4);
+    expect(xs[1]).toBeGreaterThan((3 * L) / 4);
+    expect(s.pieces.reduce((t, p) => t + p.weight, 0)).toBe(s.positions.length / 3);
+    // The sort key is the camera's distance to the nearest piece, not to the empty middle.
+    const cam = [L + 40, L / 2, L / 2];
+    const key = shellSortKey(s, cam);
+    expect(Math.sqrt(key)).toBeLessThan(Math.hypot(cam[0] - xs[1], cam[1] - L / 2, cam[2] - L / 2) + L / 10);
+    expect(Math.sqrt(key)).toBeLessThan(Math.hypot(cam[0] - s.centroid[0], cam[1] - s.centroid[1], cam[2] - s.centroid[2]) - L / 4);
+  });
+
+  it('flat: a single closed shell is a single piece, centred on its mean vertex', () => {
+    const one = Int32Array.from(owner, (o) => (o === 0 ? 0 : -1));
+    const [s] = new ShellBuilder(positions, { L, G: 32, periodic: false }).build(one, 1);
+    expect(s.pieces.length).toBe(1);
+    for (let a = 0; a < 3; a++) expect(s.pieces[0].centroid[a]).toBeCloseTo(s.centroid[a], 3);
+  });
 });
 
 describe('latest-wins job queue (criterion 50)', () => {

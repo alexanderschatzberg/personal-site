@@ -25,6 +25,9 @@ const FACES = [
   [0, 1, 3, 2], [4, 5, 7, 6],
 ];
 
+/** The axis (0 x, 1 y, 2 z) each edge runs along. */
+const EDGE_AXIS = EDGES.map(([p, q]) => [1, 2, 4].indexOf(p ^ q));
+
 function edgeOf(a: number, b: number): number {
   return EDGES.findIndex(([p, q]) => (p === a && q === b) || (p === b && q === a));
 }
@@ -80,17 +83,22 @@ const TRI: Int8Array = (() => {
 export class Mesh {
   private pos = new Float32Array(3 * 4096);
   private nrm = new Float32Array(3 * 4096);
+  /** Per vertex: the grid edge it lies on (see extract), so equal keys = the same vertex. */
+  private key = new Int32Array(4096);
   count = 0; // floats written
 
-  push(x: number, y: number, z: number, nx: number, ny: number, nz: number) {
+  push(x: number, y: number, z: number, nx: number, ny: number, nz: number, key = -1) {
     if (this.count + 3 > this.pos.length) {
-      const p = new Float32Array(this.pos.length * 2), n = new Float32Array(this.pos.length * 2);
+      const p = new Float32Array(this.pos.length * 2), n = new Float32Array(this.pos.length * 2), k = new Int32Array(this.key.length * 2);
       p.set(this.pos);
       n.set(this.nrm);
+      k.set(this.key);
       this.pos = p;
       this.nrm = n;
+      this.key = k;
     }
     const i = this.count;
+    this.key[i / 3] = key;
     this.pos[i] = x;
     this.pos[i + 1] = y;
     this.pos[i + 2] = z;
@@ -98,6 +106,11 @@ export class Mesh {
     this.nrm[i + 1] = ny;
     this.nrm[i + 2] = nz;
     this.count += 3;
+  }
+
+  /** The vertex keys written so far (a view, valid until the next push or take). */
+  keys(): Int32Array {
+    return this.key.subarray(0, this.count / 3);
   }
 
   /** Copies of what was written (exact length), and start over. */
@@ -117,7 +130,9 @@ function at(i: number, m: number, wrap: boolean): number {
 
 /**
  * Append the iso-surface (field = iso, inside = field > iso) of f to mesh. Grid point g on an axis
- * is drawn at (g − margin)·h. Returns the number of triangles added.
+ * is drawn at (g − margin)·h. Returns the number of triangles added. Each vertex's key is its
+ * grid edge, ((z·(G+1) + y)·(G+1) + x)·3 + axis for the edge's lower end (x, y, z) ∈ [0, G]³ as
+ * drawn, so on a periodic grid the two sides of a cut get different keys.
  */
 export function extract(f: Field, iso: number, h: number, margin: number, mesh: Mesh): number {
   const { data, G, periodic } = f;
@@ -135,6 +150,7 @@ export function extract(f: Field, iso: number, h: number, margin: number, mesh: 
   const li = [0, 0], lj = [0, 0], lk = [0, 0];
   const grad = new Float64Array(6);
   const before = mesh.count;
+  const G1 = G + 1;
   for (let c = 0; c < cz; c++) {
     lk[0] = c;
     lk[1] = c + 1 === mz ? 0 : c + 1;
@@ -160,6 +176,7 @@ export function extract(f: Field, iso: number, h: number, margin: number, mesh: 
         li[0] = a0;
         li[1] = a1;
         const gx = gIndex(ax, a) - margin;
+        const kBase = ((gz + margin) * G1 + gy + margin) * G1 + gx + margin;
         for (let t = TRI_START[cfg]; t < TRI_START[cfg + 1]; t++) {
           const [p, q] = EDGES[TRI[t]];
           const s = (iso - v[p]) / (v[q] - v[p]);
@@ -184,7 +201,7 @@ export function extract(f: Field, iso: number, h: number, margin: number, mesh: 
             ny /= len;
             nz /= len;
           } else nz = 1;
-          mesh.push(x, y, z, nx, ny, nz);
+          mesh.push(x, y, z, nx, ny, nz, 3 * (kBase + (P[2] * G1 + P[1]) * G1 + P[0]) + EDGE_AXIS[TRI[t]]);
         }
       }
     }
