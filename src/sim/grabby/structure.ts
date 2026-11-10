@@ -83,7 +83,7 @@ const EPS = 1e-12;
  * Move uniform positions (in place) onto the cosmic web. clumpiness 0 is a no-op.
  * Deterministic for given params and positions.
  */
-export function applyCosmicWeb(positions: Float32Array, p: Params): void {
+export function applyCosmicWeb(positions: Float32Array, p: Params, report?: (frac: number) => void): void {
   const c = p.clumpiness;
   if (!(c > 0)) return;
   const n = positions.length / 3;
@@ -162,6 +162,7 @@ export function applyCosmicWeb(positions: Float32Array, p: Params): void {
   };
 
   for (let i = 0; i < n; i++) {
+    if (report && (i & 16383) === 0) report(i / n);
     for (let k = 0; k < 3; k++) x[k] = positions[3 * i + k];
     const j1 = nucSpace.nearestTo(x[0], x[1], x[2]);
     image(j1, c1);
