@@ -46,6 +46,38 @@ void main() {
   #include <colorspace_fragment>
 }`;
 
+/**
+ * Draw order in 3d. The galaxies' dots are translucent at the 3d default (no depth write), so on
+ * their own they can't keep a shell behind them off them. A depth-only copy of the dots is drawn
+ * right after them and before every shell: a far shell then fails the depth test where a near
+ * dot is, so it doesn't tint it, while a near shell still blends over the galaxies behind it. The
+ * dots keep blending among themselves exactly as before (drawing the dots after the shells
+ * instead would also stop the tint, but would put galaxies behind a shell on top of it).
+ */
+export const POINTS_RENDER_ORDER = 0;
+export const POINTS_DEPTH_ORDER = 0.5;
+/** renderOrder of the i-th shell back to front (its fading-out mesh just before its current one). */
+export function shellRenderOrder(i: number, which: 'old' | 'cur'): number {
+  return (which === 'old' ? 1 : 2) + 2 * i;
+}
+
+/** The dots' depth-only pass: same footprint (texture, size, alpha test), depth written, no colour. */
+export function pointsDepthMaterial(dots: THREE.PointsMaterial): THREE.PointsMaterial {
+  const m = new THREE.PointsMaterial({ map: dots.map, sizeAttenuation: dots.sizeAttenuation, colorWrite: false, depthWrite: true, depthTest: true, transparent: true });
+  syncPointsDepth(dots, m);
+  return m;
+}
+
+/** Follow a restyle of the dots (size, opacity, alpha test). */
+export function syncPointsDepth(dots: THREE.PointsMaterial, depth: THREE.PointsMaterial) {
+  if (depth.alphaTest !== dots.alphaTest) depth.needsUpdate = true;
+  depth.size = dots.size;
+  depth.opacity = dots.opacity;
+  depth.alphaTest = dots.alphaTest;
+  depth.map = dots.map;
+  depth.sizeAttenuation = dots.sizeAttenuation;
+}
+
 interface Shown {
   mesh: THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>;
   fade: number;
@@ -216,7 +248,7 @@ export class ShellLayer {
     return moving;
   }
 
-  /** Draw order back to front by each civ's centroid distance from the camera (after the points). */
+  /** Draw order back to front by each civ's centroid distance from the camera (after the points and their depth pass). */
   sort(camera: THREE.Camera) {
     if (!this.visible) return;
     const cam = camera.position;
@@ -228,8 +260,8 @@ export class ShellLayer {
     }
     order.sort((a, b) => b[0] - a[0]);
     order.forEach(([, m], i) => {
-      if (m.old) m.old.mesh.renderOrder = 1 + 2 * i;
-      if (m.cur) m.cur.mesh.renderOrder = 2 + 2 * i;
+      if (m.old) m.old.mesh.renderOrder = shellRenderOrder(i, 'old');
+      if (m.cur) m.cur.mesh.renderOrder = shellRenderOrder(i, 'cur');
     });
   }
 

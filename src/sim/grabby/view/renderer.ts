@@ -16,7 +16,7 @@ import { MAX_PIXEL_RATIO } from './phone';
 import { dotStyle } from './dots';
 import { donutRadii, donutSegment, embedPositions } from './donut';
 import { pickOwnedNear, projectForPick, ScreenGrid, torusVisible, type Facing } from './pick';
-import { ShellLayer } from './shellLayer';
+import { POINTS_DEPTH_ORDER, POINTS_RENDER_ORDER, pointsDepthMaterial, ShellLayer, syncPointsDepth } from './shellLayer';
 import { choosePick } from './shells';
 import { updateRanges } from './ranges';
 import { pendingRangeCap, UploadTracker } from './upload';
@@ -171,6 +171,9 @@ export class Renderer {
   private camera: THREE.OrthographicCamera | THREE.PerspectiveCamera = this.ortho;
   private controls?: OrbitControls;
   private points?: THREE.Points;
+  /** 3d: the dots' depth-only pass, between them and the shells (see shellLayer POINTS_DEPTH_ORDER). */
+  private pointsDepth?: THREE.Points;
+  private depthMaterial: THREE.PointsMaterial;
   private colors?: Float32Array;
   private colorUpload?: UploadTracker;
   private outline?: THREE.LineSegments;
@@ -206,6 +209,7 @@ export class Renderer {
     this.renderer.domElement.setAttribute('aria-hidden', 'true');
     container.appendChild(this.renderer.domElement);
     this.material = new THREE.PointsMaterial({ size: 3, sizeAttenuation: false, vertexColors: true, map: dotTexture(), alphaTest: 0.5 });
+    this.depthMaterial = pointsDepthMaterial(this.material);
     this.scene.add(this.group);
     this.group.add(this.scaler);
     this.scaler.add(this.content);
@@ -244,7 +248,14 @@ export class Renderer {
     this.colorUpload = new UploadTracker(colorAttr, pendingRangeCap(n * 3));
     this.points = new THREE.Points(geo, this.material);
     this.points.frustumCulled = false;
+    this.points.renderOrder = POINTS_RENDER_ORDER;
     this.content.add(this.points);
+    if (dim === 3) {
+      this.pointsDepth = new THREE.Points(geo, this.depthMaterial);
+      this.pointsDepth.frustumCulled = false;
+      this.pointsDepth.renderOrder = POINTS_DEPTH_ORDER;
+      this.content.add(this.pointsDepth);
+    }
     this.group.rotation.set(0, 0, 0);
     this.scaler.scale.setScalar(1);
 
@@ -483,6 +494,7 @@ export class Renderer {
     m.depthWrite = !translucent;
     m.blending = blending;
     m.alphaTest = alphaTest;
+    syncPointsDepth(m, this.depthMaterial);
   }
 
   private resize() {
@@ -530,7 +542,8 @@ export class Renderer {
       o.geometry.dispose();
       if (o !== this.points) (o.material as THREE.Material).dispose();
     }
-    this.points = this.outline = this.occluder = undefined;
+    this.pointsDepth?.removeFromParent(); // shares the points' geometry
+    this.points = this.pointsDepth = this.outline = this.occluder = undefined;
     this.donut = undefined;
   }
 
@@ -541,6 +554,7 @@ export class Renderer {
     this.disposeScene();
     this.material.map?.dispose();
     this.material.dispose();
+    this.depthMaterial.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }
