@@ -82,7 +82,17 @@ img { max-width: 100%; display: block; }
   row-gap: 40px;
 }
 .label { color: var(--muted); }
-.intro { margin: 0; max-width: 520px; }
+.intro { max-width: 520px; }
+.intro p { margin: 0 0 1.2em; }
+.intro p:last-child { margin-bottom: 0; }
+.home-photo {
+  grid-column: 2;
+  width: 400px;
+  max-width: 100%;
+  aspect-ratio: 8 / 5;
+  object-fit: cover;
+  border-radius: 4px;
+}
 .plain-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
 .row { display: flex; gap: 24px; }
 .row.wrap { flex-wrap: wrap; gap: 4px 24px; }
@@ -93,6 +103,7 @@ img { max-width: 100%; display: block; }
 @media (max-width: 560px) {
   .shell { padding-top: 48px; }
   .home-grid { grid-template-columns: 1fr; row-gap: 8px; }
+  .home-photo { grid-column: 1; }
   .home-grid > .label:not(:first-child) { margin-top: 32px; }
   .row { flex-direction: column; gap: 0; }
 }
@@ -162,16 +173,13 @@ img { max-width: 100%; display: block; }
   .essay-card { flex-direction: column-reverse; gap: 4px; }
 }
 
-/* ---------- About ---------- */
-.about { display: flex; flex-wrap: wrap; gap: 40px; align-items: flex-start; }
-.about-photo {
-  flex: 0 0 200px;
-  width: 200px;
-  aspect-ratio: 4 / 5;
-  object-fit: cover;
-  border-radius: 4px;
+/* ---------- Photos ---------- */
+.photo-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.photo img { width: 100%; height: auto; aspect-ratio: 1; object-fit: cover; border-radius: 4px; }
+.photo:hover img { opacity: 0.85; }
+@media (max-width: 560px) {
+  .photo-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
-.about .prose { flex: 1 1 320px; min-width: 0; }
 
 /* ---------- Essay page ---------- */
 .essay { max-width: 600px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 40px; }

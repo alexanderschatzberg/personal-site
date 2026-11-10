@@ -1,0 +1,52 @@
+---
+import { resolve } from 'node:path';
+import { getImage, Image } from 'astro:assets';
+import exifr from 'exifr';
+import type { ImageMetadata } from 'astro';
+import Base from '../layouts/Base.astro';
+
+// Every JPG/PNG/WebP in src/photos/ shows up here, newest first by date taken
+// (from the photo's EXIF data; photos without one go last, by file name).
+// Astro resizes and compresses them at build time and strips their metadata.
+const files = import.meta.glob<{ default: ImageMetadata }>('../photos/*.{jpg,jpeg,png,webp,JPG,JPEG,PNG,WEBP}', { eager: true });
+
+// Glob paths are relative to this file; builds run from the project root.
+async function dateTaken(path: string): Promise<number> {
+  try {
+    const exif = await exifr.parse(resolve('src/pages', path), ['DateTimeOriginal', 'CreateDate']);
+    const d = exif?.DateTimeOriginal ?? exif?.CreateDate;
+    return d instanceof Date ? d.getTime() : 0;
+  } catch {
+    return 0;
+  }
+}
+
+const photos = (
+  await Promise.all(
+    Object.entries(files).map(async ([path, mod]) => ({
+      src: mod.default,
+      name: path.split('/').pop()!.replace(/\.\w+$/, ''),
+      taken: await dateTaken(path),
+      full: await getImage({ src: mod.default, width: Math.min(2000, mod.default.width), format: 'webp' }),
+    })),
+  )
+).sort((a, b) => b.taken - a.taken || b.name.localeCompare(a.name));
+---
+<Base title="Photos" path="photos">
+  <h1 class="page-title">Photos</h1>
+  {photos.length === 0
+    ? <p class="muted">No photos yet.</p>
+    : <div class="photo-grid">
+        {photos.map((p, i) => (
+          <a href={p.full.src} class="photo">
+            <Image
+              src={p.src}
+              alt={p.name}
+              widths={[400, 800]}
+              sizes="(max-width: 560px) 50vw, 240px"
+              loading={i < 6 ? 'eager' : 'lazy'}
+            />
+          </a>
+        ))}
+      </div>}
+</Base>

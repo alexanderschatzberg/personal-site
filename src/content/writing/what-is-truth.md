@@ -1,6 +1,5 @@
 ---
-title: What is truth?
-subtitle: A response to Truth.
+title: "What Is Truth?"
 date: 2026-10-01
 ---
 
@@ -12,11 +11,11 @@ The truthiness of a piece of media refers to the maximum possible accuracy with 
 
 This means that the medium of your media matters a lot.
 
-Different media elicit responses from different brain regions, which may be more or less similar to the theoretical stimulus triggered by the event(s) that the media represents. For the sake of example, let's say that a bar fight breaks out between two men after one spilled the other's beer. A drunk eyewitness testimony likening the brawl to a WWE match, complete with the chairs and suplexes, contains a great deal less truth than the CCTV camera showing the two men sluggishly rolling around on the ground. Cameras and microphones are super neat in their ability to trigger a very similar pattern of action potentials in the visual and audio cortices as the original experience did.
+Different media elicit responses from different brain regions, which may be more or less similar to the theoretical stimulus triggered by the event(s) that the media represents. For the sake of example, let's say that a bar fight breaks out between two men after one spilled the other's beer. A drunk eyewitness's testimony likening the brawl to a WWE match, complete with the chairs and suplexes, contains a great deal less truth than the CCTV camera showing the two men sluggishly rolling around on the ground. Cameras and microphones are super neat in their ability to trigger a pattern of action potentials in the visual and auditory cortices very similar to that of the original experience.
 
 It also means that truth is not subjective, but that its accessibility varies greatly by individual.
 
-A blind man may not be able to access the complete truth encoded in the video, as he must rely on a written description of the video, which may encode much of the important information (there were no folding chairs involved, unfortunately), but exclude other information (shirt colors, beer types, etc).
+A blind man may not be able to access the complete truth encoded in the video, as he must rely on a description of the video, which may encode much of the important information (there were no folding chairs involved, unfortunately), but exclude other information (shirt colors, beer types, etc.).
 
 A chess grandmaster may be able to back out quite a bit of information about the mental states of the players from watching just a computerized representation of the board, particularly if he is close friends with each of them and they have all competed extensively together.
 

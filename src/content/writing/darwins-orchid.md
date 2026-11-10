@@ -7,7 +7,7 @@ date: 2026-05-23
 
 "Good heavens, what insect can suck it?" — Charles Darwin
 
-This orchid, *Angraecum sesquipedale*, is native to Madagascar. James Bateman, who I've never heard of, sent Darwin a sample of the unusual flower in 1854. He (Darwin, although presumably Bateman as well) was curious why an insect would be incentivized to pollinate this flower, as the nectar lies at the bottom of a foot-long tube. He hypothesized that there was an insect with a ridiculously long proboscis that would allow it to drink the nectar while rubbing its hairy little body all over the plant's reproductive organs.
+This orchid, *Angraecum sesquipedale*, is native to Madagascar. James Bateman, who I've never heard of, sent Darwin a sample of the unusual flower in 1862. He (Darwin, although presumably Bateman as well) was curious why an insect would be incentivized to pollinate this flower, as the nectar lies at the bottom of a foot-long tube. He hypothesized that there was an insect with a ridiculously long proboscis that would allow it to drink the nectar while rubbing its hairy little body all over the plant's reproductive organs.
 
 Darwin died before his theory could be verified, but, in 1903, the *Xanthopan* moth was discovered.
 

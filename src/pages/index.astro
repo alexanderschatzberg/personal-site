@@ -8,8 +8,14 @@ const projects = (await getProjects()).slice(0, 3);
 ---
 <Base>
   <div class="home-grid">
-    <span class="label">now</span>
-    <p class="intro">I'm an undergrad at Cornell studying CS, Math, and Cognitive Science and Co-Founder of Robotic Studio, an agentic hardware engineering platform. I also do computational biology research with Professor Shaila Musharoff. In my free time, I run, read, cook, and spend significant amounts of time outdoors</p>
+    <img class="home-photo" src="/images/me2.jpg" alt="Zander Schatzberg" />
+
+    <span class="label">about</span>
+    <div class="intro">
+      <p>Hi! I'm Zander, and somehow you made it to my website.</p>
+      <p>I'm an undergrad at Cornell studying CS, Math, and Cognitive Science, and the co-founder of Robotic Studio, an agentic hardware engineering platform. I also do computational genomics research with Professor Shaila Musharoff.</p>
+      <p>I run more than is advisable, build mildly interesting and almost entirely useless side projects (some of which are on here), read less than I would like to, cook meals that range from half-decent to barely edible, write poorly, and make questionable decisions in the great outdoors.</p>
+    </div>
 
     <span class="label">writing</span>
     <ul class="plain-list">
@@ -36,6 +42,7 @@ const projects = (await getProjects()).slice(0, 3);
     <span class="label">elsewhere</span>
     <div class="row wrap">
       <a class="underline" href={`mailto:${SITE.email}`}>email</a>
+      <a class="underline" href="/resume.pdf" download="Zander-Schatzberg-Resume.pdf">resume</a>
       {SITE.links.map((l) => <a class="underline" href={l.href}>{l.label}</a>)}
     </div>
   </div>
