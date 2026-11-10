@@ -17,7 +17,8 @@ describe('engine speed at scale (criterion 35)', () => {
   const cases: [string, Partial<Params>, number][] = [
     ['2d 500k', { galaxies: 500000 }, 6000],
     ['2d 1M', { galaxies: 1000000 }, 15000],
-    ['3d 1M', { dim: 3, galaxies: 1000000 }, 15000],
+    ['3d 1M', { dim: 3, galaxies: 1000000 }, 6000],
+    ['3d 200k', { dim: 3 }, 1000],
     ['sphere 500k', { geometry: 'sphere', galaxies: 500000 }, 8000],
   ];
   for (const [name, p, limit] of cases) {

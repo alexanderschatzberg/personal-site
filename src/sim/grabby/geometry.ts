@@ -190,95 +190,24 @@ export class Space {
     const n = this.n;
     const k = Math.max(0, Math.min(kWanted, n - 1));
     const knn = new Int32Array(n * k);
-    const seen = new Int32Array(n);
     const bestD = new Float64Array(k);
     const bestI = new Int32Array(k);
-    const maxG = Math.max(this.G[0], this.G[1], this.G[2]);
-    const rLimit = this.torus ? Math.ceil(maxG / 2) + 1 : maxG;
-    const items = this.cellItems;
-    const starts = this.cellStart;
-
-    const [gx, gy, gz] = this.G;
-    const torus = this.torus;
-    const pos = this.pos;
-    const stamp = this.stamp;
-
-    for (let i = 0; i < n; i++) {
-      if (report && (i & 16383) === 0) report('neighbours', i / n);
-      let found = 0;
-      const c0 = this.cellOf[i];
-      const cx = c0 % gx, cy = Math.floor(c0 / gx) % gy, cz = Math.floor(c0 / (gx * gy));
-      const px = pos[3 * i], py = pos[3 * i + 1], pz = pos[3 * i + 2];
-      // Ring r covers Chebyshev offset r. A point outside rings 0..r is at least r·cw away.
-      // Cell stamps are fresh per ring, so torus wrap can revisit an earlier ring's cell;
-      // the per-point `seen` stamp handles that.
-      // Cells are visited in the same order as visitCells(cx, cy, cz, r, r). Once k points
-      // are held, a cell (or row, or slab) whose nearest possible point is farther than the
-      // k-th best cannot change the result, so it is skipped without looking at its points;
-      // it would be skipped again on any revisit, since the k-th best only shrinks.
-      const tag = i + 1;
-      for (let r = 0; r <= rLimit; r++) {
-        const id = ++this.stampId;
-        const zr = gz === 1 ? 0 : r;
-        for (let dz = -zr; dz <= zr; dz++) {
-          let z = cz + dz;
-          if (torus) z = ((z % gz) + gz) % gz;
-          else if (z < 0 || z >= gz) continue;
-          const z2 = gz === 1 ? 0 : this.gap2(pz, z, gz);
-          if (found === k && z2 > bestD[k - 1]) continue;
-          for (let dy = -r; dy <= r; dy++) {
-            let y = cy + dy;
-            if (torus) y = ((y % gy) + gy) % gy;
-            else if (y < 0 || y >= gy) continue;
-            const zy2 = z2 + this.gap2(py, y, gy);
-            if (found === k && zy2 > bestD[k - 1]) continue;
-            const ady = Math.max(Math.abs(dz), Math.abs(dy));
-            // Inside the ring's shell only dx = ±r is on ring r.
-            const step = ady < r ? 2 * r : 1;
-            for (let dx = -r; dx <= r; dx += step) {
-              let x = cx + dx;
-              if (torus) x = ((x % gx) + gx) % gx;
-              else if (x < 0 || x >= gx) continue;
-              const cell = (z * gy + y) * gx + x;
-              if (stamp[cell] === id) continue;
-              stamp[cell] = id;
-              if (found === k && zy2 + this.gap2(px, x, gx) > bestD[k - 1]) continue;
-              for (let q = starts[cell]; q < starts[cell + 1]; q++) {
-                const j = items[q];
-                if (j === i || seen[j] === tag) continue;
-                seen[j] = tag;
-                const d = this.rank2(i, j);
-                if (found < k) {
-                  let p = found++;
-                  while (p > 0 && bestD[p - 1] > d) {
-                    bestD[p] = bestD[p - 1];
-                    bestI[p] = bestI[p - 1];
-                    p--;
-                  }
-                  bestD[p] = d;
-                  bestI[p] = j;
-                } else if (k > 0 && d < bestD[k - 1]) {
-                  let p = k - 1;
-                  while (p > 0 && bestD[p - 1] > d) {
-                    bestD[p] = bestD[p - 1];
-                    bestI[p] = bestI[p - 1];
-                    p--;
-                  }
-                  bestD[p] = d;
-                  bestI[p] = j;
-                }
-              }
-            }
-          }
-        }
-        const reach = r * this.cw;
-        if (found === k && bestD[k - 1] <= reach * reach) break;
-      }
+    // A kd-tree adapts to clustering (the cosmic web packs some grid cells with hundreds of
+    // points and leaves others empty), so it beats the uniform grid there. Exact: the k nearest
+    // by (squared ranking distance, then index), so the result does not depend on query order;
+    // queries go in tree order for cache locality.
+    const tree = new KdTree(this.pos, n);
+    const size = this.torus ? this.size : 0;
+    const order = tree.order;
+    for (let q = 0; q < n; q++) {
+      if (report && (q & 16383) === 0) report('neighbours', q / n);
+      const i = order[q];
+      tree.knn(i, k, size, bestD, bestI);
       for (let m = 0; m < k; m++) knn[i * k + m] = bestI[m];
     }
 
     report?.('bridges', 0);
-    const bridges = this.bridges(knn, k, report);
+    const bridges = this.bridges(knn, k, tree, report);
     report?.('graph', 0);
 
     // Symmetrise: i→j for every j in knn(i), and j→i; bridges both ways.
@@ -327,7 +256,7 @@ export class Space {
    * Borůvka on top of the kNN graph: while it has more than one component, link each
    * component to its nearest point outside it. Returns the added pairs (i, j) flat.
    */
-  private bridges(knn: Int32Array, k: number, report?: (stage: 'bridges', frac: number) => void): number[] {
+  private bridges(knn: Int32Array, k: number, tree: KdTree, report?: (stage: 'bridges', frac: number) => void): number[] {
     const n = this.n;
     const parent = new Int32Array(n);
     for (let i = 0; i < n; i++) parent[i] = i;
@@ -357,7 +286,6 @@ export class Space {
     // subtree whose points all share the query's component is skipped whole, and a subtree
     // farther than the component's best so far is skipped too. The search is exact, so the
     // result does not depend on the order of the queries.
-    const tree = new KdTree(this.pos, n);
     const label = new Int32Array(n);
     const bestD = new Float64Array(n);
     const bestI = new Int32Array(n);
@@ -467,6 +395,9 @@ class KdTree {
   private readonly box: Float64Array;
   /** Component shared by every point in the node, or -1 if they differ. */
   private readonly lab: Int32Array;
+  /** Parent of each node (-1 for the root), and the leaf holding each point. */
+  private readonly parent: Int32Array;
+  private readonly leafOf: Int32Array;
   private nodes = 0;
   private stackN = new Int32Array(64);
   private stackD = new Float64Array(64);
@@ -480,6 +411,8 @@ class KdTree {
     this.right = new Int32Array(cap);
     this.box = new Float64Array(6 * cap);
     this.lab = new Int32Array(cap);
+    this.parent = new Int32Array(cap).fill(-1);
+    this.leafOf = new Int32Array(n);
     if (n > 0) this.build(0, n);
   }
 
@@ -504,14 +437,17 @@ class KdTree {
     box[o + 3] = x1; box[o + 4] = y1; box[o + 5] = z1;
     if (b - a <= LEAF) {
       this.right[node] = -1;
+      for (let q = a; q < b; q++) this.leafOf[idx[q]] = node;
       return node;
     }
     const ex = x1 - x0, ey = y1 - y0, ez = z1 - z0;
     const axis = ex >= ey && ex >= ez ? 0 : ey >= ez ? 1 : 2;
     const mid = (a + b) >> 1;
     this.select(a, b - 1, mid, axis);
-    this.build(a, mid);
-    this.right[node] = this.build(mid, b);
+    this.parent[this.build(a, mid)] = node;
+    const r = this.build(mid, b);
+    this.parent[r] = node;
+    this.right[node] = r;
     return node;
   }
 
@@ -536,6 +472,108 @@ class KdTree {
       else if (k >= i) l = i;
       else return;
     }
+  }
+
+  /** Point indices in tree order (leaf by leaf). */
+  get order(): Int32Array {
+    return this.idx;
+  }
+
+  /**
+   * The k points nearest to point i (excluding i) by squared ranking distance (Euclidean or
+   * minimum-image when size > 0; chord on the sphere), ties by the lower index, into bestD /
+   * bestI in that order. Returns how many were found (k unless there are fewer other points).
+   */
+  knn(i: number, k: number, size: number, bestD: Float64Array, bestI: Int32Array): number {
+    if (k === 0 || this.nodes === 0) return 0;
+    const pos = this.pos;
+    const px = pos[3 * i], py = pos[3 * i + 1], pz = pos[3 * i + 2];
+    // Bottom-up: the query's own leaf first (a tight bound at once), then at each ancestor the
+    // sibling subtree, unless it is entirely farther than the k-th best.
+    let node = this.leafOf[i];
+    let found = this.scanLeaf(node, i, px, py, pz, k, size, bestD, bestI, 0);
+    while (node > 0) {
+      const p = this.parent[node];
+      const sib = node === p + 1 ? this.right[p] : p + 1;
+      const lb = this.lowerBound(px, py, pz, sib, size);
+      if (found < k || lb <= bestD[k - 1]) found = this.search(sib, lb, i, px, py, pz, k, size, bestD, bestI, found);
+      node = p;
+    }
+    return found;
+  }
+
+  /** Offer the points of one leaf to the k-best list (sorted by distance, then index). */
+  private scanLeaf(
+    node: number, i: number, px: number, py: number, pz: number, k: number, size: number,
+    bestD: Float64Array, bestI: Int32Array, found: number,
+  ): number {
+    const pos = this.pos, idx = this.idx, half = size / 2;
+    for (let q = this.lo[node]; q < this.hi[node]; q++) {
+      const j = idx[q];
+      if (j === i) continue;
+      let dx = Math.abs(px - pos[3 * j]);
+      let dy = Math.abs(py - pos[3 * j + 1]);
+      let dz = Math.abs(pz - pos[3 * j + 2]);
+      if (size > 0) {
+        if (dx > half) dx = size - dx;
+        if (dy > half) dy = size - dy;
+        if (dz > half) dz = size - dz;
+      }
+      const d = dx * dx + dy * dy + dz * dz;
+      let p: number;
+      if (found < k) p = found++;
+      else if (d < bestD[k - 1] || (d === bestD[k - 1] && j < bestI[k - 1])) p = k - 1;
+      else continue;
+      while (p > 0 && (bestD[p - 1] > d || (bestD[p - 1] === d && bestI[p - 1] > j))) {
+        bestD[p] = bestD[p - 1];
+        bestI[p] = bestI[p - 1];
+        p--;
+      }
+      bestD[p] = d;
+      bestI[p] = j;
+    }
+    return found;
+  }
+
+  /** Search the subtree under root (lower bound lb0) for the k-best list. */
+  private search(
+    root: number, lb0: number, i: number, px: number, py: number, pz: number, k: number, size: number,
+    bestD: Float64Array, bestI: Int32Array, found: number,
+  ): number {
+    let sn = this.stackN, sd = this.stackD;
+    let sp = 0;
+    sn[sp] = root;
+    sd[sp++] = lb0;
+    while (sp > 0) {
+      const node = sn[--sp];
+      if (found === k && sd[sp] > bestD[k - 1]) continue;
+      const r = this.right[node];
+      if (r < 0) {
+        found = this.scanLeaf(node, i, px, py, pz, k, size, bestD, bestI, found);
+        continue;
+      }
+      if (sp + 2 > sn.length) {
+        const nn = new Int32Array(sn.length * 2);
+        nn.set(sn);
+        const nd = new Float64Array(sd.length * 2);
+        nd.set(sd);
+        this.stackN = sn = nn;
+        this.stackD = sd = nd;
+      }
+      const l = node + 1;
+      const dL = this.lowerBound(px, py, pz, l, size);
+      const dR = this.lowerBound(px, py, pz, r, size);
+      const full = found === k;
+      // Push the farther child first so the nearer one is searched first.
+      if (dL <= dR) {
+        if (!full || dR <= bestD[k - 1]) { sn[sp] = r; sd[sp++] = dR; }
+        if (!full || dL <= bestD[k - 1]) { sn[sp] = l; sd[sp++] = dL; }
+      } else {
+        if (!full || dL <= bestD[k - 1]) { sn[sp] = l; sd[sp++] = dL; }
+        if (!full || dR <= bestD[k - 1]) { sn[sp] = r; sd[sp++] = dR; }
+      }
+    }
+    return found;
   }
 
   /** Recompute each node's shared component (children have larger ids, so go backwards). */
