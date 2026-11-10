@@ -38,7 +38,7 @@ const photos = (
     ? <p class="muted">No photos yet.</p>
     : <div class="photo-grid">
         {photos.map((p, i) => (
-          <a href={p.full.src} class="photo">
+          <a href={p.full.src} class="photo" data-index={i}>
             <Image
               src={p.src}
               alt={p.name}
@@ -49,4 +49,99 @@ const photos = (
           </a>
         ))}
       </div>}
+
+  <div class="viewer" role="dialog" aria-modal="true" aria-label="Photo viewer" tabindex="-1" hidden>
+    <div class="viewer-stage">
+      <button class="viewer-side viewer-prev" type="button" aria-label="Previous photo">[←]</button>
+      <img class="viewer-img" alt="" />
+      <button class="viewer-side viewer-next" type="button" aria-label="Next photo">[→]</button>
+    </div>
+    <div class="viewer-bar">
+      <span class="viewer-count muted" aria-live="polite"></span>
+      <span class="viewer-hint muted">← → to browse · esc to close</span>
+      <button class="viewer-close" type="button">[close]</button>
+    </div>
+  </div>
 </Base>
+
+<script>
+  // Click a photo to open it full size; browse with the arrows, the keyboard or a swipe.
+  const links = [...document.querySelectorAll<HTMLAnchorElement>('.photo[data-index]')];
+  const viewer = document.querySelector<HTMLElement>('.viewer');
+  const header = document.querySelector<HTMLElement>('.site-header');
+
+  if (viewer && header && links.length) {
+    const img = viewer.querySelector<HTMLImageElement>('.viewer-img')!;
+    const count = viewer.querySelector<HTMLElement>('.viewer-count')!;
+    const closeBtn = viewer.querySelector<HTMLButtonElement>('.viewer-close')!;
+    const root = document.documentElement;
+    let current = -1;
+    let opener: HTMLElement | null = null;
+
+    const preload = (i: number) => { new Image().src = links[(i + links.length) % links.length].href; };
+
+    function show(i: number) {
+      current = (i + links.length) % links.length;
+      const link = links[current];
+      img.src = link.href;
+      img.alt = link.querySelector('img')?.alt ?? '';
+      count.textContent = `${current + 1} / ${links.length}`;
+      preload(current + 1);
+      preload(current - 1);
+    }
+
+    function open(i: number) {
+      opener = document.activeElement as HTMLElement;
+      root.classList.add('viewer-open');
+      // The header is pinned while the viewer is open; the viewer starts just below it.
+      root.style.setProperty('--viewer-top', `${header!.getBoundingClientRect().height}px`);
+      viewer!.hidden = false;
+      show(i);
+      viewer!.focus();
+    }
+
+    function close() {
+      viewer!.hidden = true;
+      root.classList.remove('viewer-open');
+      img.removeAttribute('src');
+      current = -1;
+      opener?.focus();
+    }
+
+    links.forEach((link, i) =>
+      link.addEventListener('click', (e) => {
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return; // let new-tab clicks through
+        e.preventDefault();
+        open(i);
+      }),
+    );
+
+    viewer.querySelector('.viewer-prev')!.addEventListener('click', () => show(current - 1));
+    viewer.querySelector('.viewer-next')!.addEventListener('click', () => show(current + 1));
+    closeBtn.addEventListener('click', close);
+    // Clicking the empty space around the photo closes the viewer.
+    viewer.querySelector('.viewer-stage')!.addEventListener('click', (e) => { if (e.target === e.currentTarget) close(); });
+
+    document.addEventListener('keydown', (e) => {
+      if (current < 0) return;
+      if (e.key === 'ArrowRight') show(current + 1);
+      else if (e.key === 'ArrowLeft') show(current - 1);
+      else if (e.key === 'Escape') close();
+      else return;
+      e.preventDefault();
+    });
+
+    let touchX: number | null = null;
+    viewer.addEventListener('touchstart', (e) => { touchX = e.touches[0].clientX; }, { passive: true });
+    viewer.addEventListener('touchend', (e) => {
+      if (touchX === null) return;
+      const dx = e.changedTouches[0].clientX - touchX;
+      touchX = null;
+      if (Math.abs(dx) > 40) show(current + (dx < 0 ? 1 : -1));
+    });
+
+    window.addEventListener('resize', () => {
+      if (current >= 0) root.style.setProperty('--viewer-top', `${header!.getBoundingClientRect().height}px`);
+    });
+  }
+</script>
