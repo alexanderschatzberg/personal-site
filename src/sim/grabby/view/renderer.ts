@@ -120,7 +120,7 @@ class BorderLayer {
     let lo = Infinity, hi = -1;
     const write = (k: number) => {
       const slot = set.active[k];
-      this.write(k, slot, set.shown[slot]);
+      this.write(k, slot, set.civ[k]);
       if (k < lo) lo = k;
       if (k > hi) hi = k;
     };

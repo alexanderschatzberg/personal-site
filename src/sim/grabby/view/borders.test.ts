@@ -137,3 +137,43 @@ describe('border geometry', () => {
     expect(Math.abs(ed)).toBeLessThan(1e-6);
   });
 });
+
+describe('border set at scale', () => {
+  it('costs about 16 bytes per edge (index + incidence) while few borders are active', () => {
+    const n = 200000;
+    const e = new Uint32Array(2 * 3 * n);
+    let m = 0;
+    for (let i = 0; i < n; i++)
+      for (const d of [1, 17, 401]) {
+        e[m++] = i;
+        e[m++] = (i + d) % n;
+      }
+    const E = e.length / 2;
+    const b = new BorderSet(e, n);
+    const owner = new Int32Array(n).fill(-1);
+    for (let g = 0; g < 500; g++) owner[g] = 1;
+    b.sync(owner);
+    expect(b.activeCount).toBeGreaterThan(0);
+    expect(b.byteLength).toBeLessThanOrEqual(16 * E + 4 * (n + 1) + (1 << 16));
+  });
+
+  it('civ[k] is the civ drawn at draw index k, after any mix of syncs', () => {
+    let seed = 3;
+    const rand = () => ((seed = (seed * 1103515245 + 12345) >>> 0) / 2 ** 32);
+    const n = 300;
+    const e: number[] = [];
+    for (let i = 0; i < n; i++) for (const d of [1, 5, 31]) if (i + d < n) e.push(i, i + d);
+    const E = Uint32Array.from(e);
+    const owner = new Int32Array(n).fill(-1);
+    const b = new BorderSet(E, n);
+    b.sync(owner);
+    for (let round = 0; round < 300; round++) {
+      // sometimes a big change, so the packed arrays have to grow
+      const count = round % 50 === 0 ? n : 1 + Math.floor(rand() * 6);
+      const changed = Int32Array.from({ length: count }, () => Math.floor(rand() * n));
+      for (const g of changed) owner[g] = Math.floor(rand() * 5) - 1;
+      b.sync(owner, changed, changed.length);
+      for (let k = 0; k < b.activeCount; k++) expect(b.civ[k]).toBe(slotOwner(E, owner, b.active[k]));
+    }
+  });
+});

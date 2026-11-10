@@ -32,50 +32,63 @@ export function slotOwner(edges: Uint32Array, owner: ArrayLike<number>, slot: nu
   return slot & 1 ? oj : oi;
 }
 
+/** Starting length of the packed (per draw index) arrays; they double as borders appear. */
+const PACKED_START = 1024;
+
+/**
+ * Memory: one Int32 per slot (`index`) plus the incidence index (one Uint32 per edge end), about
+ * 16 bytes per edge. Everything else is per active slot and grows on demand, since only edges
+ * on a border are ever active.
+ */
 export class BorderSet {
-  /** Packed active slots; active[0 .. activeCount). */
-  readonly active: Int32Array;
   /** Slot → its index in `active`, or -1. */
   readonly index: Int32Array;
   activeCount = 0;
-  /** Draw indices whose slot or colour changed in the last sync (may include ≥ activeCount). */
-  readonly dirty: Int32Array;
   dirtyCount = 0;
-  /** Civ each slot is currently drawn for. */
-  readonly shown: Int32Array;
+  /** Packed active slots; active[0 .. activeCount). */
+  private _active = new Int32Array(PACKED_START);
+  /** Civ drawn at each draw index (same order as `active`). */
+  private _civ = new Int32Array(PACKED_START);
+  /** Draw indices whose slot or colour changed in the last sync (may include ≥ activeCount). */
+  private _dirty = new Int32Array(PACKED_START);
+  /** Per draw index: the sync epoch it was last marked dirty in. */
+  private dirtyMark = new Uint32Array(PACKED_START);
   private inc: { offsets: Uint32Array; list: Uint32Array };
-  private edgeMark: Uint32Array;
-  private dirtyMark: Uint32Array;
   private epoch = 0;
 
   constructor(readonly edges: Uint32Array, n: number) {
-    const slots = edges.length;
-    this.active = new Int32Array(slots);
-    this.index = new Int32Array(slots).fill(-1);
-    this.shown = new Int32Array(slots).fill(-1);
-    this.dirty = new Int32Array(slots);
-    this.dirtyMark = new Uint32Array(slots);
-    this.edgeMark = new Uint32Array(slots >> 1);
+    this.index = new Int32Array(edges.length).fill(-1);
     this.inc = incidence(edges, n);
   }
 
-  /** Bring the slots up to date. With `galaxies`, only edges touching the first `count` of them. */
+  get active(): Int32Array {
+    return this._active;
+  }
+  get civ(): Int32Array {
+    return this._civ;
+  }
+  get dirty(): Int32Array {
+    return this._dirty;
+  }
+
+  /** Bytes held by this set's arrays (not counting `edges`). */
+  get byteLength(): number {
+    return [this.index, this._active, this._civ, this._dirty, this.dirtyMark, this.inc.offsets, this.inc.list].reduce((s, a) => s + a.byteLength, 0);
+  }
+
+  /** Bring the slots up to date. With `galaxies`, only edges touching the first `count` of them.
+   *  An edge reached from both of its ends is simply updated twice; the second time is a no-op. */
   sync(owner: ArrayLike<number>, galaxies?: ArrayLike<number>, count = galaxies?.length ?? 0) {
     this.dirtyCount = 0;
     this.epoch++;
     if (!galaxies) {
-      for (let e = 0; e < this.edgeMark.length; e++) this.updateEdge(e, owner);
+      for (let e = 0; e < this.edges.length >> 1; e++) this.updateEdge(e, owner);
       return;
     }
     const { offsets, list } = this.inc;
     for (let k = 0; k < count; k++) {
       const g = galaxies[k];
-      for (let p = offsets[g]; p < offsets[g + 1]; p++) {
-        const e = list[p];
-        if (this.edgeMark[e] === this.epoch) continue;
-        this.edgeMark[e] = this.epoch;
-        this.updateEdge(e, owner);
-      }
+      for (let p = offsets[g]; p < offsets[g + 1]; p++) this.updateEdge(list[p], owner);
     }
   }
 
@@ -86,19 +99,25 @@ export class BorderSet {
       if (want < 0) {
         if (at >= 0) this.remove(slot);
       } else if (at < 0) {
-        this.index[slot] = this.activeCount;
-        this.active[this.activeCount] = slot;
-        this.markDirty(this.activeCount++);
-      } else if (this.shown[slot] !== want) this.markDirty(at);
-      this.shown[slot] = want;
+        if (this.activeCount === this._active.length) this.grow();
+        const k = this.activeCount++;
+        this.index[slot] = k;
+        this._active[k] = slot;
+        this._civ[k] = want;
+        this.markDirty(k);
+      } else if (this._civ[at] !== want) {
+        this._civ[at] = want;
+        this.markDirty(at);
+      }
     }
   }
 
   private remove(slot: number) {
     const k = this.index[slot];
     const last = --this.activeCount;
-    const moved = this.active[last];
-    this.active[k] = moved;
+    const moved = this._active[last];
+    this._active[k] = moved;
+    this._civ[k] = this._civ[last];
     this.index[moved] = k;
     this.index[slot] = -1;
     if (k !== last) this.markDirty(k);
@@ -107,7 +126,21 @@ export class BorderSet {
   private markDirty(k: number) {
     if (this.dirtyMark[k] === this.epoch) return;
     this.dirtyMark[k] = this.epoch;
-    this.dirty[this.dirtyCount++] = k;
+    this._dirty[this.dirtyCount++] = k;
+  }
+
+  /** Double the packed arrays (keeping their contents). */
+  private grow() {
+    const cap = Math.min(this.index.length, 2 * this._active.length);
+    const bigger = <T extends Int32Array | Uint32Array>(a: T): T => {
+      const b = new (a.constructor as new (n: number) => T)(cap);
+      b.set(a);
+      return b;
+    };
+    this._active = bigger(this._active);
+    this._civ = bigger(this._civ);
+    this._dirty = bigger(this._dirty);
+    this.dirtyMark = bigger(this.dirtyMark);
   }
 }
 
