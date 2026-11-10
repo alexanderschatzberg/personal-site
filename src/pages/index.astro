@@ -17,17 +17,6 @@ const projects = (await getProjects()).slice(0, 3);
       <p>I run more than is advisable, build mildly interesting and almost entirely useless side projects (some of which are on here), read less than I would like to, cook meals that range from half-decent to barely edible, write poorly, and make questionable decisions in the great outdoors.</p>
     </div>
 
-    <span class="label">writing</span>
-    <ul class="plain-list">
-      {essays.map((e) => (
-        <li class="row">
-          <span class="muted nowrap">{formatDate(e.data.date)}</span>
-          <a class="underline" href={`/writing/${e.id}/`}>{e.data.title}</a>
-        </li>
-      ))}
-      <li class="more"><a href="/writing/">all writing →</a></li>
-    </ul>
-
     <span class="label">projects</span>
     <ul class="plain-list">
       {projects.map((p) => (
@@ -37,6 +26,17 @@ const projects = (await getProjects()).slice(0, 3);
         </li>
       ))}
       <li class="more"><a href="/projects/">all projects →</a></li>
+    </ul>
+
+    <span class="label">writing</span>
+    <ul class="plain-list">
+      {essays.map((e) => (
+        <li class="row">
+          <span class="muted nowrap">{formatDate(e.data.date)}</span>
+          <a class="underline" href={`/writing/${e.id}/`}>{e.data.title}</a>
+        </li>
+      ))}
+      <li class="more"><a href="/writing/">all writing →</a></li>
     </ul>
 
     <span class="label">elsewhere</span>
