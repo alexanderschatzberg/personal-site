@@ -67,6 +67,26 @@ describe('border selection', () => {
     }
   });
 
+  it('draws no border on bridges (the last nBridges pairs), full and incremental syncs alike', () => {
+    // edges 0-1, 1-2, 2-3 are neighbour links; 0-3 and 1-3 are bridges
+    const E = u32(0, 1, 1, 2, 2, 3, 0, 3, 1, 3);
+    const owner = i32(0, 1, 2, 3);
+    const b = new BorderSet(E, 4, 2);
+    b.sync(owner);
+    const slots = activePairs(b, owner).map((s) => Number(s.split(':')[0]));
+    expect(slots.sort((x, y) => x - y)).toEqual([0, 1, 2, 3, 4, 5]);
+    owner[3] = 0;
+    b.sync(owner, i32(3), 1);
+    for (let k = 0; k < b.activeCount; k++) expect(b.active[k]).toBeLessThan(6);
+    const fresh = new BorderSet(E, 4, 2);
+    fresh.sync(owner);
+    expect(activePairs(b, owner)).toEqual(activePairs(fresh, owner));
+    // without nBridges every edge can carry a border
+    const all = new BorderSet(E, 4);
+    all.sync(owner);
+    expect(activePairs(all, owner).some((s) => Number(s.split(':')[0]) >= 6)).toBe(true);
+  });
+
   it('reports which draw indices need rewriting after a sync', () => {
     const owner = i32(0, 0, 1, -1);
     const b = new BorderSet(edges, 4);

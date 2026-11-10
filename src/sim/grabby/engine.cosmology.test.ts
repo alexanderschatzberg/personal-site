@@ -5,8 +5,9 @@ import { describe, expect, it } from 'vitest';
 import staticFixture from './__fixtures__/static-h0.json';
 import { STATIC_CASES, digest } from './__fixtures__/static-cases';
 import { makeCosmology } from './cosmology';
-import { simulate } from './engine';
+import { edgeList, simulate } from './engine';
 import { Space } from './geometry';
+import { makeRng } from './rng';
 import { DEFAULTS, SCALE_SAMPLES, TODAY_GYR } from './types';
 import type { Params, SimResult } from './types';
 
@@ -100,6 +101,84 @@ describe('SimResult cosmology fields', () => {
       for (const v of r.edges) deg[v]++;
       expect(Math.min(...deg)).toBeGreaterThanOrEqual(r.params.dim === 3 ? 12 : 8);
     }
+  });
+});
+
+describe('bridges come last in edges (criterion 42)', () => {
+  /** kNN pairs first (exactly the symmetrised brute-force kNN, i < j), then nBridges bridges,
+   *  each i < j, not a kNN pair, joining two components of the graph so far; connected at the
+   *  end. Returns nBridges. */
+  function checkEdges(edges: Uint32Array, nBridges: number, n: number, k: number, dist: (i: number, j: number) => number): number {
+    const knn = new Set<number>();
+    for (let i = 0; i < n; i++) {
+      const best: [number, number][] = [];
+      for (let j = 0; j < n; j++) if (j !== i) best.push([dist(i, j), j]);
+      best.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+      for (const [, j] of best.slice(0, k)) knn.add(Math.min(i, j) * n + Math.max(i, j));
+    }
+    expect(Number.isInteger(nBridges)).toBe(true);
+    const nPairs = edges.length / 2;
+    const nKnn = nPairs - nBridges;
+    expect(nKnn).toBe(knn.size);
+    for (let e = 0; e < nKnn; e++) {
+      const i = edges[2 * e], j = edges[2 * e + 1];
+      expect(i).toBeLessThan(j);
+      expect(knn.has(i * n + j)).toBe(true);
+    }
+    const parent = Int32Array.from({ length: n }, (_, i) => i);
+    const find = (x: number): number => (parent[x] === x ? x : (parent[x] = find(parent[x])));
+    for (let e = 0; e < nKnn; e++) parent[find(edges[2 * e])] = find(edges[2 * e + 1]);
+    for (let e = nKnn; e < nPairs; e++) {
+      const i = edges[2 * e], j = edges[2 * e + 1];
+      expect(i).toBeLessThan(j);
+      expect(knn.has(i * n + j)).toBe(false);
+      expect(find(i)).not.toBe(find(j));
+      parent[find(i)] = find(j);
+    }
+    let roots = 0;
+    for (let i = 0; i < n; i++) if (find(i) === i) roots++;
+    expect(roots).toBe(1);
+    return nBridges;
+  }
+
+  it('simulate: edges are kNN pairs then nBridges bridges (clumped runs, every geometry)', () => {
+    const cases: Partial<Params>[] = [
+      { galaxies: 600, clumpiness: 1, webScaleGly: 30, seed: 'br1' },
+      { galaxies: 600, clumpiness: 1, webScaleGly: 30, geometry: 'torus', seed: 'br2' },
+      { galaxies: 600, clumpiness: 1, webScaleGly: 30, geometry: 'sphere', seed: 'br3' },
+      { galaxies: 900, clumpiness: 1, webScaleGly: 40, dim: 3, seed: 'br4' },
+    ];
+    for (const p of cases) {
+      const r = simulate({ ...p, pLife: 1e-30 });
+      const space = spaceOf(r);
+      checkEdges(r.edges, r.nBridges, r.params.galaxies, r.params.dim === 3 ? 12 : 8, (i, j) => space.dist(i, j));
+    }
+  }, 60000);
+
+  it('edgeList: islands of points get their bridges last (2d flat, torus, 3d)', () => {
+    // Clusters of 20 points, far apart, so the kNN graph is several islands.
+    for (const [dim, geometry, clusters] of [[2, 'flat', 4], [2, 'torus', 3], [3, 'flat', 5]] as const) {
+      const rng = makeRng(`islands-${dim}-${geometry}`);
+      const per = 20, n = clusters * per, L = 100;
+      const pos = new Float32Array(3 * n);
+      for (let c = 0; c < clusters; c++) {
+        const cx = 10 + 80 * rng(), cy = 10 + 80 * rng(), cz = dim === 3 ? 10 + 80 * rng() : 0;
+        for (let m = 0; m < per; m++) {
+          const i = c * per + m;
+          pos[3 * i] = cx + rng() - 0.5;
+          pos[3 * i + 1] = cy + rng() - 0.5;
+          pos[3 * i + 2] = dim === 3 ? cz + rng() - 0.5 : 0;
+        }
+      }
+      const space = new Space(pos, dim, geometry, L);
+      const k = dim === 3 ? 12 : 8;
+      const { edges, nBridges } = edgeList(space.neighbours(k), n);
+      expect(checkEdges(edges, nBridges, n, k, (i, j) => space.dist(i, j))).toBe(clusters - 1);
+    }
+  });
+
+  it('a uniform field has no bridges', () => {
+    expect(simulate({ galaxies: 2000, clumpiness: 0, pLife: 1e-30 }).nBridges).toBe(0);
   });
 });
 

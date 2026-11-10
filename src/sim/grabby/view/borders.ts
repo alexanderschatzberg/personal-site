@@ -41,6 +41,8 @@ const PACKED_START = 1024;
  * on a border are ever active.
  */
 export class BorderSet {
+  /** The pairs that can carry a border (SimResult.edges without its bridges). */
+  readonly edges: Uint32Array;
   /** Slot → its index in `active`, or -1. */
   readonly index: Int32Array;
   activeCount = 0;
@@ -56,9 +58,12 @@ export class BorderSet {
   private inc: { offsets: Uint32Array; list: Uint32Array };
   private epoch = 0;
 
-  constructor(readonly edges: Uint32Array, n: number) {
-    this.index = new Int32Array(edges.length).fill(-1);
-    this.inc = incidence(edges, n);
+  /** `edges` as in SimResult; its last `nBridges` pairs are bridges and never get a border, so
+   *  the set keeps only the pairs before them. */
+  constructor(edges: Uint32Array, n: number, nBridges = 0) {
+    this.edges = edges.subarray(0, edges.length - 2 * Math.max(0, Math.min(nBridges, edges.length >> 1)));
+    this.index = new Int32Array(this.edges.length).fill(-1);
+    this.inc = incidence(this.edges, n);
   }
 
   get active(): Int32Array {

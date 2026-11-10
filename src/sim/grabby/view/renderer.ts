@@ -68,12 +68,13 @@ class BorderLayer {
     private parent: THREE.Object3D,
     private positions: Float32Array,
     edges: Uint32Array,
+    nBridges: number,
     private space: Space,
     private colorOf: (civ: number) => THREE.Color,
     /** Maps a flat segment into the drawn space (the donut); absent = drawn as is. */
     private mapSegment?: (seg: Float64Array, out: Float64Array) => void,
   ) {
-    this.set = new BorderSet(edges, positions.length / 3);
+    this.set = new BorderSet(edges, positions.length / 3, nBridges);
     this.patches = space.dim === 3;
   }
 
@@ -311,7 +312,7 @@ export class Renderer {
     const space: Space = { dim, geometry, sizeGly: L };
     const { R, r: tube } = donutRadii(L);
     const map = donut ? (seg: Float64Array, out: Float64Array) => donutSegment(seg, L, R, tube, out) : undefined;
-    this.borders = new BorderLayer(this.content, r.positions, r.edges, space, (c) => this.civColor(c), map);
+    this.borders = new BorderLayer(this.content, r.positions, r.edges, r.nBridges ?? 0, space, (c) => this.civColor(c), map);
     this.borders.setVisible(this.bordersOn);
 
     this.resize();

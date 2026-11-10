@@ -3,7 +3,7 @@
 // Browser-safe: runs in a Web Worker.
 
 import { makeCosmology } from './cosmology';
-import { Space } from './geometry';
+import { Space, type Graph } from './geometry';
 import { makeRng, normal } from './rng';
 import { applyCosmicWeb } from './structure';
 import { DEFAULTS, RANGES, REAL_GALAXIES } from './types';
@@ -139,6 +139,41 @@ function progressReporter(onProgress: ProgressFn | undefined): (stage: string, f
   };
 }
 
+/**
+ * SimResult.edges from the neighbour graph: each pair once, i < j, the kNN pairs first (in CSR
+ * order) and the bridges last (criterion 42), with their count, so the view can tell them apart.
+ */
+export function edgeList(graph: Graph, n: number): { edges: Uint32Array; nBridges: number } {
+  const isBridge = new Set<number>();
+  const nBridges = graph.bridges.length / 2;
+  for (let b = 0; b < graph.bridges.length; b += 2) {
+    const i = graph.bridges[b], j = graph.bridges[b + 1];
+    isBridge.add(Math.min(i, j) * n + Math.max(i, j));
+  }
+  // Counted first so no growable array is needed.
+  let edgeCount = 0;
+  for (let i = 0; i < n; i++) {
+    for (let e = graph.start[i]; e < graph.start[i + 1]; e++) if (i < graph.adj[e]) edgeCount++;
+  }
+  const edges = new Uint32Array(2 * edgeCount);
+  let w = 0;
+  for (let i = 0; i < n; i++) {
+    for (let e = graph.start[i]; e < graph.start[i + 1]; e++) {
+      const j = graph.adj[e];
+      if (i < j && (nBridges === 0 || !isBridge.has(i * n + j))) {
+        edges[w++] = i;
+        edges[w++] = j;
+      }
+    }
+  }
+  for (let b = 0; b < graph.bridges.length; b += 2) {
+    const i = graph.bridges[b], j = graph.bridges[b + 1];
+    edges[w++] = Math.min(i, j);
+    edges[w++] = Math.max(i, j);
+  }
+  return { edges, nBridges };
+}
+
 export function simulate(input: Partial<Params>): SimResult {
   return simulateWithProgress(input);
 }
@@ -180,21 +215,7 @@ export function simulateWithProgress(input: Partial<Params>, onProgress?: Progre
   const space = new Space(positions, p.dim, p.geometry, p.sizeGly);
   report('neighbours', 0);
   const graph = space.neighbours(p.dim === 3 ? 12 : 8, report);
-  // Each pair once, i < j, in CSR order; counted first so no growable array is needed.
-  let edgeCount = 0;
-  for (let i = 0; i < n; i++) {
-    for (let e = graph.start[i]; e < graph.start[i + 1]; e++) if (i < graph.adj[e]) edgeCount++;
-  }
-  const edges = new Uint32Array(2 * edgeCount);
-  for (let i = 0, w = 0; i < n; i++) {
-    for (let e = graph.start[i]; e < graph.start[i + 1]; e++) {
-      const j = graph.adj[e];
-      if (i < j) {
-        edges[w++] = i;
-        edges[w++] = j;
-      }
-    }
-  }
+  const { edges, nBridges } = edgeList(graph, n);
 
   // Expansion. Distances on `positions` are comoving; a front at speed v covers comoving
   // distance d in conformal time d / v, i.e. dχ/dt = v / a(t).
@@ -396,6 +417,7 @@ export function simulateWithProgress(input: Partial<Params>, onProgress?: Progre
     tLast: tEndRun,
     scale: cosmo.scaleOver(tEndRun),
     edges,
+    nBridges,
     tToday: cosmo.tToday,
   };
 }

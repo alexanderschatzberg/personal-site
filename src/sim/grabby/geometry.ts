@@ -10,6 +10,9 @@ export interface Graph {
   adj: Int32Array;
   /** Distance (under the geometry's metric) for each adj entry. */
   w: Float64Array;
+  /** The bridges added to connect the kNN graph, as flat pairs (i, j), in the order found. Each
+   *  joins two components of the kNN graph plus the earlier bridges, so none is a kNN pair. */
+  bridges: Int32Array;
 }
 
 export class Space {
@@ -317,7 +320,7 @@ export class Space {
     for (let i = 0; i < n; i++) {
       for (let q = start[i]; q < start[i + 1]; q++) dist[q] = this.dist(i, adjOut[q]);
     }
-    return { start, adj: adjOut, w: dist };
+    return { start, adj: adjOut, w: dist, bridges: Int32Array.from(bridges) };
   }
 
   /**
