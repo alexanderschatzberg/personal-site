@@ -2,9 +2,9 @@
 import type { Params } from '../types';
 
 /** Galaxies for a phone run when the URL doesn't set them. */
-export const PHONE_GALAXIES = 2000;
+export const PHONE_GALAXIES = 50000;
 /** Largest galaxies value the phone drawer accepts (a URL may still ask for more). */
-export const PHONE_GALAXY_CAP = 15000;
+export const PHONE_GALAXY_CAP = 200000;
 /** Largest device pixel ratio the renderer uses. */
 export const MAX_PIXEL_RATIO = 2;
 

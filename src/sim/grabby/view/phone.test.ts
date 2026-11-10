@@ -10,9 +10,9 @@ describe('phone defaults', () => {
     expect(isPhone({ coarse: false, screenW: 390, screenH: 844 })).toBe(false); // narrow desktop window
   });
 
-  it('uses 2000 galaxies on a phone when the URL has none', () => {
-    expect(PHONE_GALAXIES).toBe(2000);
-    expect(phoneParams(true, { seed: 'x' })).toEqual({ params: { seed: 'x', galaxies: 2000 }, heavy: false });
+  it('uses 50000 galaxies on a phone when the URL has none', () => {
+    expect(PHONE_GALAXIES).toBe(50000);
+    expect(phoneParams(true, { seed: 'x' })).toEqual({ params: { seed: 'x', galaxies: 50000 }, heavy: false });
   });
 
   it('leaves desktop params alone', () => {
@@ -21,10 +21,10 @@ describe('phone defaults', () => {
   });
 
   it('honours a URL galaxies value on a phone, flagging one above the cap as heavy', () => {
-    expect(PHONE_GALAXY_CAP).toBe(15000);
+    expect(PHONE_GALAXY_CAP).toBe(200000);
     expect(phoneParams(true, { galaxies: 8000 })).toEqual({ params: { galaxies: 8000 }, heavy: false });
-    expect(phoneParams(true, { galaxies: 15000 })).toEqual({ params: { galaxies: 15000 }, heavy: false });
-    expect(phoneParams(true, { galaxies: 30000 })).toEqual({ params: { galaxies: 30000 }, heavy: true });
+    expect(phoneParams(true, { galaxies: 200000 })).toEqual({ params: { galaxies: 200000 }, heavy: false });
+    expect(phoneParams(true, { galaxies: 300000 })).toEqual({ params: { galaxies: 300000 }, heavy: true });
   });
 
   it('does not mutate the query object', () => {
@@ -34,10 +34,10 @@ describe('phone defaults', () => {
   });
 
   it('caps the galaxies field on a phone, except an unchanged honoured value', () => {
-    expect(capGalaxies(true, 20000, 2000)).toBe(15000);
-    expect(capGalaxies(true, 9000, 2000)).toBe(9000);
-    expect(capGalaxies(true, 30000, 30000)).toBe(30000); // came from the URL; untouched
-    expect(capGalaxies(true, 40000, 30000)).toBe(15000);
-    expect(capGalaxies(false, 40000, 4000)).toBe(40000);
+    expect(capGalaxies(true, 250000, 50000)).toBe(200000);
+    expect(capGalaxies(true, 90000, 50000)).toBe(90000);
+    expect(capGalaxies(true, 300000, 300000)).toBe(300000); // came from the URL; untouched
+    expect(capGalaxies(true, 400000, 300000)).toBe(200000);
+    expect(capGalaxies(false, 400000, 4000)).toBe(400000);
   });
 });
