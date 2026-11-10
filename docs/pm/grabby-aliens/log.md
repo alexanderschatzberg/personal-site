@@ -1,10 +1,12 @@
 # pm log: grabby aliens simulation
 
 Branch: `pm/grabby-aliens` · Plan: `plan.md` · Started: 2026-11-09
-State: round 7 implementing (3D shells)
+State: awaiting merge OK
 
 ## For the user
 
+- 2026-11-10 **check**: The 3D shells are only verified by unit tests and offline renders. In a browser, check the fresnel look, the crossfade during playback, the shared walls, and that clicking a galaxy inside a crowded area opens the right civ.
+- 2026-11-10 **review**: When almost every galaxy is claimed (late in a 3D torus run), a shell update takes ~120 ms in the background worker, so shells refresh about 8×/s during fast playback.
 - 2026-11-09 **review**: A link shared from a phone includes galaxies=50000. On a phone it then counts as an explicit choice, so [2d]/[3d] won't swap it to the 3D default.
 - 2026-11-09 **check**: The 3D 1M timing test has ~12% headroom (5.3 s against a 6 s limit) and may fail now and then on a busy machine.
 - 2026-11-09 **check**: At 1M galaxies, loading a finished run copies ~1M event objects from the worker to the page, so expect a short freeze after the progress bar and high memory. Try 1M in a browser. If it's bad, the fix is to send events as typed arrays, which is a contract change.
@@ -134,3 +136,11 @@ State: round 7 implementing (3D shells)
     - draw order
     - torus centroid
     - a late-run perf test
+- 2026-11-10 Round 7 fix round 1 (5 commits, 257 tests):
+  - Shared walls via the min-field: overlap went from 13%/20% to 0%/0.5%.
+  - Pick precedence: only another civ's shell can hide a tapped galaxy. This deviates from the plan's wording, and the PM accepts it: every galaxy is inside its own shell, so the literal rule would never let a galaxy win.
+  - A depth pre-pass stops far shells tinting near galaxies.
+  - Torus sort uses the nearest piece.
+  - Perf: the worst at the defaults is 20/27 ms; full coverage is 71/120 ms, in the worker.
+  - The PM inspected the late-run render: shells meet at flattened shared walls.
+  No third reviewer was spawned; the PM re-ran the gate, all green.
