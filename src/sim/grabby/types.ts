@@ -17,10 +17,11 @@ export interface Params {
   geometry: Geometry;
   /** Flat/torus: side length of the square or cube. Sphere: circumference. In Gly. */
   sizeGly: number;
-  /** Large-scale structure: 0 = uniform, 1 = strong cosmic web (filaments and walls around voids). */
+  /** Large-scale structure (Zel'dovich approximation): 0 = uniform, 1 = strongly evolved cosmic web
+   *  (thin filaments and dense knots around empty voids). */
   clumpiness: number;
-  /** Typical void (web cell) diameter, in Gly. Real voids are ~0.1–0.3 Gly; the default is scaled
-   *  up so the web is visible at the resolution of a few thousand points. */
+  /** Smoothing scale of the initial density field, which sets the typical void size, in Gly. Real
+   *  voids are ~0.1–0.3 Gly; the default is scaled up so the web is visible. */
   webScaleGly: number;
   /** Number of simulated points. Each stands for REAL_GALAXIES / galaxies real galaxies. */
   galaxies: number;
@@ -170,6 +171,9 @@ export interface SimResult {
    *  i < j, each pair once: edges[2k], edges[2k+1]. The view draws borders on edges whose two
    *  ends have different owners. */
   edges: Uint32Array;
+  /** The last nBridges pairs of `edges` are bridges (long links added to join clumps); all earlier
+   *  pairs are ordinary nearest-neighbour links. The view draws no borders on bridges. */
+  nBridges: number;
   /** Time at which a = 1 ("today"), or null if that is not inside [0, tEndGyr]. H0 = 0 → TODAY_GYR. */
   tToday: number | null;
 }

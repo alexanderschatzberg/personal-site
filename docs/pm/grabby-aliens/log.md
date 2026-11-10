@@ -1,14 +1,14 @@
 # pm log: grabby aliens simulation
 
 Branch: `pm/grabby-aliens` · Plan: `plan.md` · Started: 2026-11-09
-State: awaiting merge OK
+State: round 6 implementing (Zel'dovich web, 3D speed)
 
 ## For the user
 
 - 2026-11-09 **check**: At 1M galaxies, loading a finished run copies ~1M event objects from the worker to the page, so expect a short freeze after the progress bar and high memory. Try 1M in a browser. If it's bad, the fix is to send events as typed arrays, which is a contract change.
 - 2026-11-09 **check**: Donut picking assumes the donut points and the occluder share one transform, which is true today. If the donut drawing is ever restructured, re-check tap accuracy edge-on.
 - 2026-11-09 **review**: When the cosmic web leaves clumps no front can leave, the engine adds the fewest shortest 'bridge' links between them, so empires can cross voids. Without bridges, galaxies in an isolated clump could never be reached.
-- 2026-11-09 **review**: Cosmic web scale: real voids are ~0.1–0.3 Gly across, smaller than the ~1.5 Gly spacing between the simulated dots (each dot is ~5×10⁸ galaxies). The default web scale (12 Gly) is enlarged so the structure is visible. It is not to scale.
+- 2026-11-09 **review** [superseded by round 6 Zel'dovich]: Cosmic web scale: real voids are ~0.1–0.3 Gly across, smaller than the ~1.5 Gly spacing between the simulated dots (each dot is ~5×10⁸ galaxies). The default web scale (12 Gly) is enlarged so the structure is visible. It is not to scale.
 - 2026-11-09 **review**: The 2D torus is drawn as a donut, but the physics still uses a flat torus: distances don't stretch on the outside of the donut the way they would on a real ring surface. The 3D torus stays a cube with wrap hints.
 - 2026-11-09 **unfixed (minor)**: The phone sheet tabs have no matching tabpanel role, so screen-reader semantics are incomplete. The heavy-run note and the info card can overlap at the top in portrait.
 - 2026-11-09 **review**: A phone [apply] writes galaxies=2000 into the URL, so a link shared from a phone opens a 2000-galaxy run on desktop too.
@@ -96,3 +96,4 @@ State: awaiting merge OK
   - Minor, not fixed: at 1M, events/log are structured-cloned to the main thread (forced by the contract's object arrays), so there's a one-time load jank and duplicate memory. Not measured.
   - Coverage gap: pick-cache staleness is correct by reading but has no renderer-level test.
   Gate: 195/195 tests, build OK.
+- 2026-11-09 Round 6: The user's screenshot showed the Voronoi web is wrong: cell interiors filled as petals with dark spokes, pile-up at the flat edges, and bridges drawn as long white border lines. 3D is too slow to simulate. The user chose the Zel'dovich approximation. Contract: added nBridges. One agent, U11, on the feature branch, which renders PNGs for the PM to inspect.

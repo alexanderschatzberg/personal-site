@@ -414,3 +414,52 @@ U10 owns `view/**`, `worker.ts` and `grabby-aliens.astro`. It can test against t
 ## Waves
 
 U9 and U10 run in parallel in separate worktrees. Merge U9, then U10. Gate. Then a reviewer on the round 5 diff.
+
+---
+
+# Round 6: a real cosmic web, and faster 3D
+
+The user's screenshot of 2D flat at the defaults shows that the Voronoi model is wrong:
+- Galaxies fill the cell interiors as "petals" with dark radial spokes, where voids should be empty with galaxies on thin filaments and knots.
+- Galaxies pile up along the square's edges because of the flat clamping.
+- Long white lines appear: bridges drawn as border segments.
+
+The user also says 3D is far too slow **to simulate**.
+
+The user chose the **Zel'dovich approximation**. The contract gained `SimResult.nBridges` (bridges are the last nBridges pairs of `edges`). The clumpiness and webScaleGly docs were updated. Their ranges and defaults are unchanged, but the defaults may be retuned.
+
+## Acceptance criteria (round 6)
+
+40. **The Zel'dovich web replaces the Voronoi model** in `structure.ts`:
+    - **Initial field.** A Gaussian random field on a periodic grid of side sizeGly. Use 2D 512² (or 1024² if it's cheap); 3D 64³–128³, chosen from the galaxy count. It has power spectrum P(k) ∝ kⁿ·exp(−(k·R)²), where R comes from webScaleGly. The spectral index is fixed and chosen to give visibly filamentary structure; document it.
+    - **Displacement.** ψ = −∇φ, with ∇²φ = δ, computed with a hand-written radix-2 FFT (no new dependencies).
+    - **Galaxy positions.** Each galaxy is drawn uniformly as today, from the main RNG stream in the same order. The field comes from a separate stream (seed + "/web"). The final position is x = q + D·ψ(q), with ψ interpolated by CIC or trilinear. D grows with clumpiness, normalised so that the defaults sit past shell-crossing: thin filaments, dense knots, nearly empty voids.
+    - **clumpiness 0** gives exactly uniform positions and the same RNG use, so the snapshot fixture still matches.
+    - **Geometry:**
+      - Torus: wraps naturally.
+      - Flat: wraps too. No clamping, so no edge pile-up. The field is periodic, so the box edges don't show.
+      - Sphere: evaluate a 3D periodic field's gradient at the sphere points, take the tangential component, move along the great circle, then renormalise onto the sphere.
+    - **Deterministic.**
+    - **Tests:**
+      - Void fraction (share of fine grid cells holding no galaxies) rises with clumpiness, and is well above uniform at the defaults.
+      - Clustering rises with clumpiness, measured as count-in-cells variance or the nearest-neighbour statistic.
+      - No pile-up at the flat box edges: the edge strip's density stays within ±20% of the interior.
+      - Torus continuity across the wrap.
+    - **Report** the measured values.
+41. **Visual check.** Render PNGs of the galaxy positions to the scratchpad (white dots on black, about 1000 px). Write them with a tiny PNG or PPM encoder via `node:zlib` in a temp test or script that isn't committed. Required renders:
+    - 2D flat at clumpiness 0.3, 0.7 and 1, at the defaults (200k galaxies)
+    - the sphere (an equirectangular map is fine)
+    - a 3D slab projection
+
+    Report their absolute paths. The PM will look at them.
+42. **Bridges:** `edges` puts the kNN pairs first (i < j, deduplicated) and the bridges last, with `nBridges` set. The view skips borders on bridges. Update `borders.ts` and the renderer, and test it.
+43. **3D simulation speed.**
+    - First profile 3D at the defaults: 200k, clumpiness 0.7, expansion on. Also profile 3D torus and 3D with the frontier model.
+    - Target ≤ 1.0 s in Node for 3D 200k at the defaults, and ≤ 6 s for 3D 1M. Find the dominant stage.
+    - The browser worker is likely 1.5–3× slower than Node, so also consider whether the default galaxy count in 3D should be lower. Report this; don't change DEFAULTS.
+    - Optimisations must not change outputs for the same inputs (the snapshot plus a private before/after hash), except for the web itself, which changes by design.
+44. **Gate:** `npm test` and `npm run build` pass, and no test is weakened. Voronoi-specific structure tests may be replaced by Zel'dovich ones that are at least as strict. Name each replaced test.
+
+## U11: one agent on the feature branch
+
+U11 owns `structure.ts`, `engine.ts`, `geometry.ts`, the engine tests, `view/borders.ts`, `view/renderer.ts` (borders only) and their tests. It must not change types.ts or the fixture JSON.
