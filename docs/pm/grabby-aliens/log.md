@@ -78,3 +78,7 @@ State: round 5 implementing (scale up)
   - Minor: the web-scale clamp was silent.
   Fixed in ccefe65 / ad6341c / 87bf07e. The PM read torusBlocks and the toLocal transform: it marches the SDF from the point to the camera in the donut's local space, under uniform scale. It matches a brute-force march with 0 differences. No third reviewer was spawned. Gate: 170/170 tests, build OK.
 - 2026-11-09 Round 5: the user wants filaments visible, with drastically more galaxies. PM benchmark: 2D 50k 0.8 s, 200k 8.2 s, 500k 48 s; 3D 200k 1.5 s. The user chose to make the engine fast and simulate everything: default 200k, max 1M, phones 50k default and 200k cap. Units: U9 (engine perf) and U10 (view at scale), in parallel.
+- 2026-11-09 Round 5: U10 (view at scale) done: 8 commits, 119 view tests.
+  - Display constants: unchanged up to 50k galaxies. From 50k to 1M the dot floor goes 1.5 → 1 px and opacity goes to 0.55 (dark) / 0.7 (light). Dark mode blends additively from 200k.
+  - Measured: the 1M tap pick takes 0.52 ms per tap after a grid build of ~35 ms per view change. At 200k, the worst playback frame is under 0.5 ms of CPU.
+  - BorderSet memory went from ~52 to ~16 B per edge. The upload range cap now scales with buffer size.
