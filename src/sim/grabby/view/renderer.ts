@@ -14,7 +14,7 @@ import { civColor } from './palette';
 import { MAX_PIXEL_RATIO } from './phone';
 import { dotStyle } from './dots';
 import { donutRadii, donutSegment, embedPositions } from './donut';
-import { pickOwned, projectForPick, type Facing } from './pick';
+import { pickOwnedNear, projectForPick, ScreenGrid, torusVisible, type Facing } from './pick';
 import { updateRanges } from './ranges';
 import { UploadTracker } from './upload';
 
@@ -216,6 +216,9 @@ export class Renderer {
   /** Screen positions and depths for picking, reused between taps. */
   private screenXY = new Float32Array(0);
   private depth = new Float32Array(0);
+  /** The pick grid for the view it was built for (matrices, camera, canvas rect); rebuilt only
+   *  when a tap comes after the view changed. */
+  private pickCache?: { key: Float64Array; grid: ScreenGrid; visible?: (i: number) => boolean };
   /** Called after each rendered frame, e.g. to refresh the scale bar. */
   onView?: () => void;
 
@@ -247,6 +250,7 @@ export class Renderer {
   /** Swap in a new run: rebuilds the point cloud, outline, borders, camera and controls. */
   setResult(r: SimResult) {
     this.result = r;
+    this.pickCache = undefined;
     const { dim, geometry, sizeGly: L } = r.params;
     const n = r.positions.length / 3;
     this.disposeScene();
@@ -407,32 +411,41 @@ export class Renderer {
 
   /**
    * The owned galaxy a tap at a viewport point opens, or -1 (see pickOwned). Projects every galaxy
-   * with the drawing's own transform (display scale, donut, user zoom); points behind the
-   * camera, off screen, on the far side of the globe or donut, or hidden by another part of the
-   * donut are skipped.
+   * with the drawing's own transform (display scale, donut, user zoom) into a screen grid, once
+   * per view; points behind the camera, off screen or on the far side of the globe or donut are
+   * left out. A tap then looks only at the grid cells around it, and asks the (costly) donut
+   * self-occlusion test only of those candidates.
    */
   pick(clientX: number, clientY: number, maxPx: number, owner: Int32Array): number {
     const r = this.result;
     if (!r || !this.points) return -1;
-    const n = r.positions.length / 3;
-    if (this.screenXY.length !== n * 2) {
-      this.screenXY = new Float32Array(n * 2);
-      this.depth = new Float32Array(n);
-    }
     this.scene.updateMatrixWorld();
     this.camera.updateMatrixWorld();
     const viewProj = new THREE.Matrix4().multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse).elements;
-    // The donut's occluder (same radii as setResult's mesh) sits in the scaler, as content does with
-    // no offset, so it shares the points' local space and world matrix.
-    const radii = donutRadii(r.params.sizeGly);
-    const facing: Facing = this.donut
-      ? { kind: 'normals', normals: this.donut.normals, torus: { R: radii.R, r: radii.r * OCCLUDER_SHRINK } }
-      : r.params.geometry === 'sphere' ? { kind: 'sphere' } : { kind: 'none' };
-    const local = this.donut ? this.donut.world : r.positions;
+    const model = this.content.matrixWorld.elements;
     const cam = this.camera.position;
-    projectForPick(local, facing, this.content.matrixWorld.elements, viewProj, [cam.x, cam.y, cam.z], this.renderer.domElement.getBoundingClientRect(), this.screenXY, this.depth);
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const key = Float64Array.from([...model, ...viewProj, cam.x, cam.y, cam.z, rect.left, rect.top, rect.width, rect.height]);
+    const c = this.pickCache;
+    if (!c || c.key.length !== key.length || c.key.some((v, i) => v !== key[i])) {
+      const n = r.positions.length / 3;
+      if (this.screenXY.length !== n * 2) {
+        this.screenXY = new Float32Array(n * 2);
+        this.depth = new Float32Array(n);
+      }
+      // The donut's occluder (same radii as setResult's mesh) sits in the scaler, as content does
+      // with no offset, so it shares the points' local space and world matrix.
+      const radii = donutRadii(r.params.sizeGly);
+      const torus = { R: radii.R, r: radii.r * OCCLUDER_SHRINK };
+      const facing: Facing = this.donut ? { kind: 'normals', normals: this.donut.normals } : r.params.geometry === 'sphere' ? { kind: 'sphere' } : { kind: 'none' };
+      const local = this.donut ? this.donut.world : r.positions;
+      const camXYZ = [cam.x, cam.y, cam.z];
+      projectForPick(local, facing, model, viewProj, camXYZ, rect, this.screenXY, this.depth);
+      this.pickCache = { key, grid: new ScreenGrid(this.screenXY), visible: this.donut ? torusVisible(local, model, camXYZ, torus) : undefined };
+    }
     const persp = this.camera instanceof THREE.PerspectiveCamera;
-    return pickOwned(this.screenXY, persp ? this.depth : null, owner, clientX, clientY, maxPx);
+    const { grid, visible } = this.pickCache!;
+    return pickOwnedNear(grid, this.screenXY, persp ? this.depth : null, owner, clientX, clientY, maxPx, visible);
   }
 
   /** Rendered world units per CSS pixel at the view's focus (the controls' target). */
