@@ -85,7 +85,7 @@ export function mount(root: HTMLElement) {
     out.status.setAttribute('aria-live', 'polite');
     out.status.textContent = '[simulating…]';
     worker.onmessage = (e: MessageEvent<WorkerResponse>) => {
-      if (e.data.id !== id) return;
+      if (e.data.id !== id || id !== runId) return; // ignore anything from a superseded run
       if ('progress' in e.data) {
         // Shown, not announced: '[simulating…]' was announced once; ten updates a second would flood a screen reader.
         out.status.setAttribute('aria-live', 'off');

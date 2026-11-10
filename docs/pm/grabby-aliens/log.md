@@ -1,10 +1,11 @@
 # pm log: grabby aliens simulation
 
 Branch: `pm/grabby-aliens` · Plan: `plan.md` · Started: 2026-11-09
-State: round 5 implementing (scale up)
+State: awaiting merge OK
 
 ## For the user
 
+- 2026-11-09 **check**: At 1M galaxies, loading a finished run copies ~1M event objects from the worker to the page, so expect a short freeze after the progress bar and high memory. Try 1M in a browser. If it's bad, the fix is to send events as typed arrays, which is a contract change.
 - 2026-11-09 **check**: Donut picking assumes the donut points and the occluder share one transform, which is true today. If the donut drawing is ever restructured, re-check tap accuracy edge-on.
 - 2026-11-09 **review**: When the cosmic web leaves clumps no front can leave, the engine adds the fewest shortest 'bridge' links between them, so empires can cross voids. Without bridges, galaxies in an isolated clump could never be reached.
 - 2026-11-09 **review**: Cosmic web scale: real voids are ~0.1–0.3 Gly across, smaller than the ~1.5 Gly spacing between the simulated dots (each dot is ~5×10⁸ galaxies). The default web scale (12 Gly) is enlarged so the structure is visible. It is not to scale.
@@ -89,3 +90,9 @@ State: round 5 implementing (scale up)
   - Outputs are byte-identical: the H0=0 snapshot matches, and a 16-config private before/after hash agrees.
   - The PM accepted these as spec-following, not weakening: snapshot cases pin galaxies 4000 (the count the hashes were made with), the default-seed tests got 120 s timeouts, and the structure 2d cases pin 4000.
   - Merged U9 then U10. Gate: 195/195 tests, build OK.
+- 2026-11-09 Round 5 review (no blocker or major).
+  - The reviewer proved the engine optimisations exact: it ran old against new `Space.neighbours` on 600+ random and clustered cases, byte-identical.
+  - Minor, fixed by a PM one-liner: the worker onmessage guard compared the handler's own id, so it never filtered anything; it now also checks `id !== runId`.
+  - Minor, not fixed: at 1M, events/log are structured-cloned to the main thread (forced by the contract's object arrays), so there's a one-time load jank and duplicate memory. Not measured.
+  - Coverage gap: pick-cache staleness is correct by reading but has no renderer-level test.
+  Gate: 195/195 tests, build OK.
