@@ -246,6 +246,8 @@ describe('cosmic web: Zel\'dovich approximation (criterion 40)', () => {
   });
 
   it('no pile-up at the flat box edges: the outer strip is within ±20% of the interior density', () => {
+    // Criterion 40's ±20% is on the mean over seeds (PM clarification, round 6 item 48); a single
+    // seed varies through cosmic variance, so each is held to ±35%.
     const ratios: number[] = [];
     let strip = 0, all = 0;
     for (const seed of ['e1', 'e2', 'e3', 'e4']) {
