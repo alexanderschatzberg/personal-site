@@ -73,7 +73,7 @@ export const DEFAULTS: Params = {
   sizeGly: 93, // diameter of the observable universe
   clumpiness: 0.7,
   webScaleGly: 12,
-  galaxies: 4000,
+  galaxies: 200000,
   planetsPerGalaxy: 1e11,
   pLife: 1e-22,
   hardSteps: 6,
@@ -99,7 +99,7 @@ export const RANGES = {
   sizeGly: [10, 500],
   clumpiness: [0, 1],
   webScaleGly: [2, 100],
-  galaxies: [500, 50000],
+  galaxies: [500, 1000000],
   planetsPerGalaxy: [1e9, 1e13],
   pLife: [1e-30, 1e-10],
   hardSteps: [0, 12],

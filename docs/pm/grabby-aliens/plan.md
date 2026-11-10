@@ -369,3 +369,48 @@ It must also make sure that:
 ## Waves
 
 U7 and U8 run in parallel in separate worktrees off pm/grabby-aliens. Merge U7, then U8. Gate. Then one reviewer on the round 4 diff.
+
+---
+
+# Round 5: enough galaxies to see the filaments
+
+The user wants far more galaxies so the cosmic web's filaments are visible. They chose to make the engine faster and simulate every galaxy. The contract now has DEFAULTS.galaxies = 200000 and RANGES.galaxies = [500, 1000000]. Phones get a 50k default and a 200k cap.
+
+PM benchmark on the round-4 engine, defaults otherwise, Node in vitest:
+- 2D 50k: 828 ms
+- 2D 200k: 8246 ms
+- 3D 200k: 1472 ms
+- 2D 500k: 48473 ms
+
+2D is clearly superlinear, and 3D is not.
+
+## Acceptance criteria (round 5)
+
+35. **Engine speed.** Measured in Node:
+    - 2D 500k with defaults finishes in ≤ 6 s.
+    - 2D 1M finishes in ≤ 15 s.
+    - 3D 1M finishes in ≤ 15 s.
+    - Sphere 500k finishes in ≤ 8 s.
+
+    Profile first and find the superlinear step, which may be Borůvka bridges, the web's nearestTo, kNN, or the frontier/battle maths. Report the before and after times for each step. Results must not change: the H0 = 0 snapshot fixture still matches, and every existing test passes unchanged. If an exact-equivalence speed-up isn't possible for some step, stop and report instead of changing outputs.
+36. **Memory.** The engine handles 1M galaxies without blowing up memory: typed arrays, no per-galaxy objects in hot paths. Report the peak heap at 1M in 2D.
+37. **View at 1M galaxies:**
+    - Drawing stays smooth, with no per-frame O(n) work beyond what changed.
+    - The border layer copes with a few million edges.
+    - Dot size and opacity adapt to the count so the web reads clearly. Use smaller, slightly translucent dots at high counts, possibly additive blending in dark mode. These are display constants, so log them.
+    - The worker shows progress for long runs: `simulating… 40%`, or a stage name, posted from the worker.
+    - Picking stays fast. The 24px screen pick must not loop over 1M points per tap if avoidable; a coarse screen-space grid or bucket built lazily is fine.
+38. **Phones.** The phone default is 50,000 and the phone cap is 200,000. The existing phone-defaults tests are updated to the new numbers; that is a spec change, not a weakening.
+39. **Gate:** `npm test` and `npm run build` pass. The 50k/3d timing tests and the other engine timings still hold.
+
+## U9: engine performance (criteria 35, 36)
+
+U9 owns `engine.ts`, `geometry.ts`, `structure.ts`, `cosmology.ts`, `rng.ts` and the engine tests. It must not change `types.ts` or the fixture JSON. A worker progress callback needs an optional second argument, `simulate(p, onProgress?)`. That is outside the contract's `Simulate` type, so add it as an optional extra export, e.g. `simulateWithProgress`, rather than changing types.ts.
+
+## U10: view at scale (criteria 37, 38)
+
+U10 owns `view/**`, `worker.ts` and `grabby-aliens.astro`. It can test against the current engine at 200k (slow but works) or with smaller counts. If the progress export doesn't exist yet, it must handle its absence.
+
+## Waves
+
+U9 and U10 run in parallel in separate worktrees. Merge U9, then U10. Gate. Then a reviewer on the round 5 diff.

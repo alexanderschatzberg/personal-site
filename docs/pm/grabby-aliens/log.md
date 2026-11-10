@@ -1,7 +1,7 @@
 # pm log: grabby aliens simulation
 
 Branch: `pm/grabby-aliens` · Plan: `plan.md` · Started: 2026-11-09
-State: awaiting merge OK
+State: round 5 implementing (scale up)
 
 ## For the user
 
@@ -77,3 +77,4 @@ State: awaiting merge OK
   - Minor: the planetsPerGalaxy help text was wrong.
   - Minor: the web-scale clamp was silent.
   Fixed in ccefe65 / ad6341c / 87bf07e. The PM read torusBlocks and the toLocal transform: it marches the SDF from the point to the camera in the donut's local space, under uniform scale. It matches a brute-force march with 0 differences. No third reviewer was spawned. Gate: 170/170 tests, build OK.
+- 2026-11-09 Round 5: the user wants filaments visible, with drastically more galaxies. PM benchmark: 2D 50k 0.8 s, 200k 8.2 s, 500k 48 s; 3D 200k 1.5 s. The user chose to make the engine fast and simulate everything: default 200k, max 1M, phones 50k default and 200k cap. Units: U9 (engine perf) and U10 (view at scale), in parallel.
