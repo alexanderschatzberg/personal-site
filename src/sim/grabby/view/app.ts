@@ -82,13 +82,17 @@ export function mount(root: HTMLElement) {
     setPlaying(false);
     root.dataset.busy = 'true';
     root.setAttribute('aria-busy', 'true');
+    out.status.setAttribute('aria-live', 'polite');
     out.status.textContent = '[simulating…]';
     worker.onmessage = (e: MessageEvent<WorkerResponse>) => {
       if (e.data.id !== id) return;
       if ('progress' in e.data) {
+        // Shown, not announced: '[simulating…]' was announced once; ten updates a second would flood a screen reader.
+        out.status.setAttribute('aria-live', 'off');
         out.status.textContent = progressText(e.data.progress.stage, e.data.progress.frac);
         return;
       }
+      out.status.setAttribute('aria-live', 'polite');
       worker?.terminate();
       worker = undefined;
       root.dataset.busy = 'false';
@@ -103,6 +107,7 @@ export function mount(root: HTMLElement) {
     };
     worker.onerror = (e) => {
       if (id !== runId) return;
+      out.status.setAttribute('aria-live', 'polite');
       root.dataset.busy = 'false';
       root.removeAttribute('aria-busy');
       out.status.textContent = '[simulation failed]';
