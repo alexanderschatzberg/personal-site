@@ -1,16 +1,25 @@
 // Round 5 (criteria 35, 36): engine speed and memory at up to a million galaxies.
 // These runs are slow by nature (seconds each), so the vitest timeouts are generous; the
-// assertions are the plan's thresholds, measured in Node.
+// assertions are the plan's thresholds, measured in Node. Each timing is the minimum of
+// RUNS runs (round 6, item 46), so one run slowed by a parallel test file doesn't fail it.
 
 import { describe, expect, it } from 'vitest';
 import { simulate, simulateWithProgress } from './engine';
-import type { Params } from './types';
+import { DEFAULT_GALAXIES_3D, type Params } from './types';
 
-function timed(p: Partial<Params>): { ms: number; civs: number } {
-  const t0 = performance.now();
-  const r = simulate(p);
-  const ms = performance.now() - t0;
-  return { ms, civs: r.civs.length };
+const RUNS = 3;
+
+/** Fastest of RUNS runs, and every run's time. */
+function timed(p: Partial<Params>): { ms: number; all: number[]; civs: number } {
+  const all: number[] = [];
+  let civs = 0;
+  for (let i = 0; i < RUNS; i++) {
+    const t0 = performance.now();
+    const r = simulate(p);
+    all.push(performance.now() - t0);
+    civs = r.civs.length;
+  }
+  return { ms: Math.min(...all), all, civs };
 }
 
 describe('engine speed at scale (criterion 35)', () => {
@@ -18,13 +27,14 @@ describe('engine speed at scale (criterion 35)', () => {
     ['2d 500k', { galaxies: 500000 }, 6000],
     ['2d 1M', { galaxies: 1000000 }, 15000],
     ['3d 1M', { dim: 3, galaxies: 1000000 }, 6000],
-    ['3d 200k', { dim: 3 }, 1000],
+    ['3d 100k (the 3d default)', { dim: 3, galaxies: DEFAULT_GALAXIES_3D }, 1000],
+    ['3d torus 100k', { dim: 3, geometry: 'torus', galaxies: DEFAULT_GALAXIES_3D }, 1000],
     ['sphere 500k', { geometry: 'sphere', galaxies: 500000 }, 8000],
   ];
   for (const [name, p, limit] of cases) {
-    it(`${name} with the defaults finishes in ≤ ${limit / 1000} s`, () => {
-      const { ms, civs } = timed(p);
-      console.log(`${name}: ${ms.toFixed(0)} ms, ${civs} civs`);
+    it(`${name} with the defaults finishes in ≤ ${limit / 1000} s (min of ${RUNS})`, () => {
+      const { ms, all, civs } = timed(p);
+      console.log(`${name}: min ${ms.toFixed(0)} ms of [${all.map((x) => x.toFixed(0)).join(', ')}], ${civs} civs`);
       expect(ms).toBeLessThanOrEqual(limit);
     }, 600000);
   }
