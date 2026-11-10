@@ -180,14 +180,21 @@ export function simulateWithProgress(input: Partial<Params>, onProgress?: Progre
   const space = new Space(positions, p.dim, p.geometry, p.sizeGly);
   report('neighbours', 0);
   const graph = space.neighbours(p.dim === 3 ? 12 : 8, report);
-  const edgeList: number[] = [];
+  // Each pair once, i < j, in CSR order; counted first so no growable array is needed.
+  let edgeCount = 0;
   for (let i = 0; i < n; i++) {
+    for (let e = graph.start[i]; e < graph.start[i + 1]; e++) if (i < graph.adj[e]) edgeCount++;
+  }
+  const edges = new Uint32Array(2 * edgeCount);
+  for (let i = 0, w = 0; i < n; i++) {
     for (let e = graph.start[i]; e < graph.start[i + 1]; e++) {
       const j = graph.adj[e];
-      if (i < j) edgeList.push(i, j);
+      if (i < j) {
+        edges[w++] = i;
+        edges[w++] = j;
+      }
     }
   }
-  const edges = Uint32Array.from(edgeList);
 
   // Expansion. Distances on `positions` are comoving; a front at speed v covers comoving
   // distance d in conformal time d / v, i.e. dχ/dt = v / a(t).

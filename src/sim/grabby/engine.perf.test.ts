@@ -29,6 +29,24 @@ describe('engine speed at scale (criterion 35)', () => {
   }
 });
 
+describe('memory at a million galaxies (criterion 36)', () => {
+  it('2d 1M stays under 1 GB of JS heap plus typed-array buffers, sampled during the run', () => {
+    // Sampled at every progress callback (stage boundaries and every few thousand points
+    // inside the long loops). Includes whatever the test runner already holds.
+    let peakHeap = 0, peakTotal = 0;
+    const sample = () => {
+      const m = process.memoryUsage();
+      peakHeap = Math.max(peakHeap, m.heapUsed);
+      peakTotal = Math.max(peakTotal, m.heapUsed + m.arrayBuffers);
+    };
+    const r = simulateWithProgress({ galaxies: 1000000 }, sample);
+    sample();
+    const mb = (x: number) => (x / 2 ** 20).toFixed(0);
+    console.log(`2d 1M: peak heapUsed ${mb(peakHeap)} MB, heapUsed + arrayBuffers ${mb(peakTotal)} MB, ${r.events.length} events`);
+    expect(peakTotal).toBeLessThan(2 ** 30);
+  }, 600000);
+});
+
 describe('progress reporting', () => {
   it('simulateWithProgress reports stages in order with fractions in [0, 1], ending at done', () => {
     const calls: [string, number][] = [];
