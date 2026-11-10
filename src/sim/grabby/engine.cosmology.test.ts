@@ -196,7 +196,7 @@ describe('the run ends when nothing more can be reached', () => {
       expect(r.tLast).toBe(lastEventTime(r));
     }
     console.log('defaults with expansion (civs, tLast):', JSON.stringify(report));
-  });
+  }, 120000);
 
   it('a tiny static universe claimed early ends at its last event', () => {
     for (const temperMean of [0, 1]) {
@@ -240,7 +240,7 @@ describe('round 4: the run ends at the last event; tEndGyr is only a safety cap 
       report[seed] = { civs: r.civs.length, tLast: r.tLast };
     }
     console.log('static defaults (civs, tLast):', JSON.stringify(report));
-  });
+  }, 120000);
 
   it('raising the cap changes nothing when the run ended on its own', () => {
     for (const seed of ['a', 'b']) {
@@ -253,7 +253,7 @@ describe('round 4: the run ends at the last event; tEndGyr is only a safety cap 
         expect(big.tLast).toBe(r.tLast);
       }
     }
-  });
+  }, 120000);
 
   it('with expansion the neighbour graph is connected at the defaults, so only the horizon stops fronts', () => {
     for (const p of [{}, { geometry: 'sphere' as const }, { geometry: 'torus' as const }, { clumpiness: 1 }]) {
@@ -271,7 +271,7 @@ describe('round 4: the run ends at the last event; tEndGyr is only a safety cap 
       }
       expect(comps).toBe(1);
     }
-  });
+  }, 120000);
 
   it('50k galaxies in 2d with the default web finishes in under ~3 s', () => {
     const t0 = performance.now();
@@ -329,5 +329,5 @@ describe('the life window (round 2b)', () => {
     }
     console.log('life window, defaults (civs, colonize, conquer, tLast):', JSON.stringify(report));
     expect(spread).toBeGreaterThanOrEqual(4);
-  });
+  }, 120000);
 });

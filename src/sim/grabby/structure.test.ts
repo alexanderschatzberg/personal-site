@@ -9,10 +9,12 @@ import { DEFAULTS, type Params } from './types';
 
 type Case = { name: string; p: Partial<Params> };
 
+// The 2d cases pin 4000 galaxies, the default when these tests were written (round 4); the
+// round-5 default of 200k makes the per-galaxy checks below take minutes.
 const CASES: Case[] = [
-  { name: 'flat 2d', p: { dim: 2, geometry: 'flat' } },
-  { name: 'torus 2d', p: { dim: 2, geometry: 'torus' } },
-  { name: 'sphere', p: { dim: 2, geometry: 'sphere' } },
+  { name: 'flat 2d', p: { dim: 2, geometry: 'flat', galaxies: 4000 } },
+  { name: 'torus 2d', p: { dim: 2, geometry: 'torus', galaxies: 4000 } },
+  { name: 'sphere', p: { dim: 2, geometry: 'sphere', galaxies: 4000 } },
   { name: 'flat 3d', p: { dim: 3, geometry: 'flat', galaxies: 8000, sizeGly: 60, webScaleGly: 15 } },
   { name: 'torus 3d', p: { dim: 3, geometry: 'torus', galaxies: 8000, sizeGly: 60, webScaleGly: 15 } },
 ];

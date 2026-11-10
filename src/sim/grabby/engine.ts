@@ -132,7 +132,7 @@ function progressReporter(onProgress: ProgressFn | undefined): (stage: string, f
   }
   let last = 0;
   return (stage, frac) => {
-    const [b, w] = base.get(stage) ?? [last, 0];
+    const [b, w] = stage === 'done' ? [1, 0] : (base.get(stage) ?? [last, 0]);
     const f = Math.min(1, Math.max(last, b + w * Math.min(1, Math.max(0, frac))));
     last = f;
     onProgress(stage, f);
