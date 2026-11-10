@@ -15,6 +15,7 @@ import { LANDSCAPE_MQ, PORTRAIT_MQ, type Layout } from './layout';
 import { civColor } from './palette';
 import { capGalaxies, isPhone, PHONE_GALAXY_CAP, phoneParams } from './phone';
 import { isTap, PICK_RADIUS_PX } from './pick';
+import { progressText } from './progress';
 import { Renderer } from './renderer';
 import { cycleSnap, snapAfterDrag, snapHeights, stepSnap, type Snap } from './sheet';
 import { clampNum, clipSeed, paramsToQuery, queryToParams } from './url';
@@ -81,9 +82,17 @@ export function mount(root: HTMLElement) {
     setPlaying(false);
     root.dataset.busy = 'true';
     root.setAttribute('aria-busy', 'true');
+    out.status.setAttribute('aria-live', 'polite');
     out.status.textContent = '[simulating…]';
     worker.onmessage = (e: MessageEvent<WorkerResponse>) => {
       if (e.data.id !== id) return;
+      if ('progress' in e.data) {
+        // Shown, not announced: '[simulating…]' was announced once; ten updates a second would flood a screen reader.
+        out.status.setAttribute('aria-live', 'off');
+        out.status.textContent = progressText(e.data.progress.stage, e.data.progress.frac);
+        return;
+      }
+      out.status.setAttribute('aria-live', 'polite');
       worker?.terminate();
       worker = undefined;
       root.dataset.busy = 'false';
@@ -98,6 +107,7 @@ export function mount(root: HTMLElement) {
     };
     worker.onerror = (e) => {
       if (id !== runId) return;
+      out.status.setAttribute('aria-live', 'polite');
       root.dataset.busy = 'false';
       root.removeAttribute('aria-busy');
       out.status.textContent = '[simulation failed]';

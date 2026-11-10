@@ -33,25 +33,148 @@ export function isTap(dx: number, dy: number, ms: number): boolean {
  * camera among those within DEPTH_PX of that nearest distance.
  */
 export function pickOwned(xy: ArrayLike<number>, depth: ArrayLike<number> | null, owner: ArrayLike<number>, x: number, y: number, max: number): number {
+  return pickAmong(null, Math.min(owner.length, xy.length / 2), xy, depth, owner, x, y, max);
+}
+
+/**
+ * pickOwned over candidate indices only: `ids[0 .. count)` ascending, or every index below count
+ * when ids is null. `visible(i)`, if given, is asked only of owned candidates within range, and a
+ * false hides i exactly as a NaN screen position would.
+ */
+function pickAmong(
+  ids: ArrayLike<number> | null,
+  count: number,
+  xy: ArrayLike<number>,
+  depth: ArrayLike<number> | null,
+  owner: ArrayLike<number>,
+  x: number,
+  y: number,
+  max: number,
+  visible?: (i: number) => boolean,
+): number {
+  const seen = visible ? new Map<number, boolean>() : null;
+  const shown = (i: number) => {
+    if (!visible) return true;
+    let v = seen!.get(i);
+    if (v === undefined) seen!.set(i, (v = visible(i)));
+    return v;
+  };
   const n = Math.min(owner.length, xy.length / 2);
   let best = -1;
   let bestD = Infinity;
-  for (let i = 0; i < n; i++) {
-    if (owner[i] < 0) continue;
+  for (let k = 0; k < count; k++) {
+    const i = ids ? ids[k] : k;
+    if (i >= n || owner[i] < 0) continue;
     const d = Math.hypot(xy[2 * i] - x, xy[2 * i + 1] - y);
-    if (d <= max && d < bestD) {
+    if (d <= max && d < bestD && shown(i)) {
       bestD = d;
       best = i;
     }
   }
   if (best < 0 || !depth) return best;
   const window = bestD + DEPTH_PX;
-  for (let i = 0; i < n; i++) {
-    if (owner[i] < 0 || i === best) continue;
+  for (let k = 0; k < count; k++) {
+    const i = ids ? ids[k] : k;
+    if (i >= n || owner[i] < 0 || i === best) continue;
     const d = Math.hypot(xy[2 * i] - x, xy[2 * i + 1] - y);
-    if (d <= window && d <= max && depth[i] < depth[best]) best = i;
+    if (d <= window && d <= max && depth[i] < depth[best] && shown(i)) best = i;
   }
   return best;
+}
+
+/** Cell side of the pick grid, CSS px. */
+export const PICK_CELL_PX = 32;
+/** Most cells the grid makes; beyond this the cells grow (only for points far off screen). */
+const MAX_CELLS = 1 << 20;
+
+/**
+ * Screen positions bucketed into square cells, so a tap looks at the few points near it instead
+ * of all of them. Built once per view (O(n)); NaN positions are left out.
+ */
+export class ScreenGrid {
+  private x0 = 0;
+  private y0 = 0;
+  private cols = 0;
+  private rows = 0;
+  private cell: number;
+  /** CSR: cell c holds items[start[c] .. start[c + 1]), ascending. */
+  private start = new Int32Array(1);
+  private items = new Int32Array(0);
+  private buf = new Int32Array(256);
+
+  constructor(xy: ArrayLike<number>, cell = PICK_CELL_PX) {
+    const n = Math.floor(xy.length / 2);
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity, m = 0;
+    for (let i = 0; i < n; i++) {
+      const x = xy[2 * i], y = xy[2 * i + 1];
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      m++;
+      if (x < x0) x0 = x;
+      if (x > x1) x1 = x;
+      if (y < y0) y0 = y;
+      if (y > y1) y1 = y;
+    }
+    this.cell = cell;
+    if (m === 0) return;
+    while (((x1 - x0) / this.cell + 1) * ((y1 - y0) / this.cell + 1) > MAX_CELLS) this.cell *= 2;
+    this.x0 = x0;
+    this.y0 = y0;
+    this.cols = Math.floor((x1 - x0) / this.cell) + 1;
+    this.rows = Math.floor((y1 - y0) / this.cell) + 1;
+    const cells = this.cols * this.rows;
+    const start = new Int32Array(cells + 1);
+    const at = new Int32Array(n).fill(-1);
+    for (let i = 0; i < n; i++) {
+      const x = xy[2 * i], y = xy[2 * i + 1];
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      const c = Math.floor((y - y0) / this.cell) * this.cols + Math.floor((x - x0) / this.cell);
+      at[i] = c;
+      start[c + 1]++;
+    }
+    for (let c = 0; c < cells; c++) start[c + 1] += start[c];
+    const fill = start.slice(0, cells);
+    const items = new Int32Array(m);
+    for (let i = 0; i < n; i++) if (at[i] >= 0) items[fill[at[i]]++] = i;
+    this.start = start;
+    this.items = items;
+  }
+
+  /** Indices, ascending, of the points in every cell that meets the square of half-side r
+   *  around (x, y): a superset of the points within r. The array is reused by the next call. */
+  near(x: number, y: number, r: number): Int32Array {
+    if (this.cols === 0) return this.buf.subarray(0, 0);
+    const cx0 = Math.max(0, Math.floor((x - r - this.x0) / this.cell)), cx1 = Math.min(this.cols - 1, Math.floor((x + r - this.x0) / this.cell));
+    const cy0 = Math.max(0, Math.floor((y - r - this.y0) / this.cell)), cy1 = Math.min(this.rows - 1, Math.floor((y + r - this.y0) / this.cell));
+    let count = 0;
+    for (let cy = cy0; cy <= cy1; cy++)
+      for (let cx = cx0; cx <= cx1; cx++) {
+        const c = cy * this.cols + cx;
+        const a = this.start[c], b = this.start[c + 1];
+        if (count + b - a > this.buf.length) {
+          const grown = new Int32Array(Math.max(2 * this.buf.length, count + b - a));
+          grown.set(this.buf.subarray(0, count));
+          this.buf = grown;
+        }
+        this.buf.set(this.items.subarray(a, b), count);
+        count += b - a;
+      }
+    return this.buf.subarray(0, count).sort();
+  }
+}
+
+/** pickOwned using a grid of the same xy: only the points near the tap are looked at. */
+export function pickOwnedNear(
+  grid: ScreenGrid,
+  xy: ArrayLike<number>,
+  depth: ArrayLike<number> | null,
+  owner: ArrayLike<number>,
+  x: number,
+  y: number,
+  max: number,
+  visible?: (i: number) => boolean,
+): number {
+  const ids = grid.near(x, y, max);
+  return pickAmong(ids, ids.length, xy, depth, owner, x, y, max, visible);
 }
 
 /** Which side of a surface is hidden: none, a sphere centred on the world origin, or per-point
@@ -91,6 +214,19 @@ export function torusBlocks(p: ArrayLike<number>, cam: ArrayLike<number>, R: num
 }
 const MIN_STEP = 1e-3;
 const MAX_STEPS = 20000;
+
+/** Whether point i of `local` is not hidden by the solid torus (same test as projectForPick's),
+ *  for asking lazily of a few candidates instead of every point. */
+export function torusVisible(local: ArrayLike<number>, model: ArrayLike<number>, cam: ArrayLike<number>, torus: { R: number; r: number }) {
+  const camLocal = toLocal(model, cam);
+  const p = [0, 0, 0];
+  return (i: number) => {
+    p[0] = local[3 * i];
+    p[1] = local[3 * i + 1];
+    p[2] = local[3 * i + 2];
+    return !torusBlocks(p, camLocal, torus.R, torus.r);
+  };
+}
 
 /** The camera position in a model's local space (model: column-major affine, invertible). */
 function toLocal(m: ArrayLike<number>, cam: ArrayLike<number>): [number, number, number] {

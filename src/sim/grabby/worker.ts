@@ -1,10 +1,16 @@
 // Runs the simulation off the main thread. In: { id, params }. Out: { id, result } with the
-// positions, scale and edges buffers transferred, or { id, error }.
-import { simulate } from './engine';
+// positions, scale and edges buffers transferred, or { id, error }. While a run is going, it
+// also posts { id, progress } (throttled to ≤ 10/s) if the engine reports progress.
+import * as engine from './engine';
 import type { Params, SimResult } from './types';
+import { throttleProgress, type OnProgress } from './view/progress';
 
 export type WorkerRequest = { id: number; params: Partial<Params> };
-export type WorkerResponse = { id: number; result: SimResult } | { id: number; error: string };
+export type WorkerProgress = { id: number; progress: { stage: string; frac: number } };
+export type WorkerResponse = { id: number; result: SimResult } | { id: number; error: string } | WorkerProgress;
+
+/** The engine's optional progress-reporting entry point (absent on older engines). */
+type WithProgress = (p: Partial<Params>, onProgress?: OnProgress) => SimResult;
 
 /** Distinct transferable buffers of a result (a buffer may only be listed once). */
 function transferables(r: SimResult): ArrayBuffer[] {
@@ -15,10 +21,13 @@ function transferables(r: SimResult): ArrayBuffer[] {
 
 self.onmessage = (e: MessageEvent<WorkerRequest>) => {
   const { id, params } = e.data;
+  const post = (msg: WorkerResponse, transfer: ArrayBuffer[] = []) => (self as unknown as Worker).postMessage(msg, transfer);
   try {
-    const result = simulate(params);
-    (self as unknown as Worker).postMessage({ id, result } satisfies WorkerResponse, transferables(result));
+    const withProgress = (engine as { simulateWithProgress?: WithProgress }).simulateWithProgress;
+    const onProgress = throttleProgress((stage, frac) => post({ id, progress: { stage: String(stage ?? ''), frac: Number(frac) } }));
+    const result = typeof withProgress === 'function' ? withProgress(params, onProgress) : engine.simulate(params);
+    post({ id, result }, transferables(result));
   } catch (err) {
-    (self as unknown as Worker).postMessage({ id, error: String(err) } satisfies WorkerResponse);
+    post({ id, error: String(err) });
   }
 };
