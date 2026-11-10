@@ -119,3 +119,18 @@ State: round 7 implementing (3D shells)
   - The PM killed an orphaned vitest worker (PID 69427, 2 h at 100% CPU, left by an earlier agent run). It probably caused one load-induced timeout in U12's second full run.
   - Gate re-run by the PM: all green.
 - 2026-11-10 Round 7: The user found 3D boundaries unclear. Three options were proposed (shells, screen-space outlines, slicer); the user chose 1, translucent territory shells. They use marching cubes in a dedicated worker, a fresnel rim and a shell-hit pick. U13 is one agent on the feature branch.
+- 2026-11-10 Round 7: U13 done (4 commits, 242 tests). One shell job takes 6–8 ms at the 3D defaults. The PM inspected the render: clear translucent bubbles.
+  - Review findings:
+    - Major: shells interpenetrate. 12% of covered grid points are doubly covered, and 20% of owned galaxies sit inside another civ's shell on the flat grid.
+    - Major: a shell hit beats the galaxy pick, so a click inside an overlap opens the wrong civ.
+    - Minor: translucent points sort under shells.
+    - Minor: the torus cut-shell centroid is wrong.
+    - Minor: the perf test times an early snapshot. A full-coverage job takes 67/112 ms, which is off the main thread.
+    - Minor: coplanar fan triangles (no cracks).
+    - Minor: ShellLayer is untested.
+  - Fix round 1:
+    - shared walls via g_c = min(f_c − iso, f_c − other_c)
+    - pick precedence
+    - draw order
+    - torus centroid
+    - a late-run perf test
