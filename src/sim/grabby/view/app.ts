@@ -3,7 +3,7 @@
 import { Space } from '../geometry';
 import { effectiveWebScaleGly } from '../structure';
 import { createTimeline } from '../timeline';
-import { DEFAULTS, RANGES, type Params, type SimResult, type Timeline } from '../types';
+import { RANGES, type Params, type SimResult, type Timeline } from '../types';
 import type { WorkerRequest, WorkerResponse } from '../worker';
 import { civName, currentMight, mightText, reuseLocalCount, temperamentWord, type LocalCountCache } from './civinfo';
 import { FIELDS, fmt, fromInput, TABS, toInput, webScaleNote, type Tab } from './fields';
@@ -13,7 +13,8 @@ import { displayScale, formatA, physicalPerRendered, runScaleAt } from './growth
 import { advance, endStatus, nextSpeed, span, SPEEDS, step } from './playback';
 import { LANDSCAPE_MQ, PORTRAIT_MQ, type Layout } from './layout';
 import { civColor } from './palette';
-import { capGalaxies, isPhone, PHONE_GALAXY_CAP, phoneParams } from './phone';
+import { dimGalaxies, startParams } from './galaxies';
+import { capGalaxies, isPhone, PHONE_GALAXY_CAP } from './phone';
 import { isTap, PICK_RADIUS_PX } from './pick';
 import { progressText } from './progress';
 import { Renderer } from './renderer';
@@ -48,10 +49,12 @@ export function mount(root: HTMLElement) {
   /** Screen length of the scale bar, CSS px (matches .g-scalebar-line in the page). */
   const SCALE_BAR_PX = 100;
 
-  // Phones start lighter unless the URL says otherwise (see phone.ts).
+  // Galaxies default by dim, and phones start lighter, unless the URL says otherwise (see galaxies.ts).
   const phone = isPhone({ coarse: matchMedia('(pointer: coarse)').matches, screenW: screen.width, screenH: screen.height });
-  const start = phoneParams(phone, queryToParams(location.search));
-  let params: Params = { ...DEFAULTS, ...start.params };
+  const start = startParams(phone, queryToParams(location.search));
+  let params: Params = start.params;
+  /** The galaxies field still shows a default the user hasn't edited; [2d]/[3d] swap it. */
+  let galaxiesAuto = start.auto;
   let result: SimResult | undefined;
   let tl: Timeline | undefined;
   let t = 0;
@@ -256,7 +259,15 @@ export function mount(root: HTMLElement) {
     run();
   }
 
-  for (const b of $$<HTMLButtonElement>('[data-dim]')) b.addEventListener('click', () => apply({ ...readForm(), dim: Number(b.dataset.dim) as 2 | 3 }));
+  for (const b of $$<HTMLButtonElement>('[data-dim]'))
+    b.addEventListener('click', () => {
+      const dim = Number(b.dataset.dim) as 2 | 3;
+      const f = readForm();
+      const galaxies = dimGalaxies(dim, phone, { galaxies: f.galaxies!, auto: galaxiesAuto });
+      input('galaxies').value = toInput(galaxies);
+      syncForm();
+      apply({ ...f, dim, galaxies });
+    });
   for (const b of $$<HTMLButtonElement>('[data-geometry]'))
     b.addEventListener('click', () => apply({ ...readForm(), geometry: b.dataset.geometry as Params['geometry'] }));
 
@@ -522,6 +533,7 @@ export function mount(root: HTMLElement) {
 
   form.addEventListener('input', (e) => {
     const sl = e.target as HTMLInputElement;
+    if (sl.name === 'galaxies' || sl.dataset?.slider === 'galaxies') galaxiesAuto = false;
     if (sl.dataset?.slider) input(sl.dataset.slider).value = sl.value;
     syncForm();
   });

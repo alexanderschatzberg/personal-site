@@ -1,6 +1,7 @@
 // Params <-> query string. Only params that differ from DEFAULTS are written, so a default
-// run has a clean URL. Reading ignores unknown keys and bad values and clamps to RANGES.
+// run has a clean URL; galaxies is compared with the default for the run's dim. Reading ignores unknown keys and bad values and clamps to RANGES.
 import { DEFAULTS, RANGES, type Params } from '../types';
+import { baseGalaxies } from './galaxies';
 
 type NumKey = keyof typeof RANGES;
 const NUM_KEYS = Object.keys(RANGES) as NumKey[];
@@ -24,7 +25,8 @@ export function clampNum(key: NumKey, v: number): number {
 export function paramsToQuery(p: Params): string {
   const q = new URLSearchParams();
   for (const k of Object.keys(DEFAULTS) as (keyof Params)[]) {
-    if (p[k] !== DEFAULTS[k]) q.set(k, String(p[k]));
+    const def = k === 'galaxies' ? baseGalaxies(p.dim) : DEFAULTS[k];
+    if (p[k] !== def) q.set(k, String(p[k]));
   }
   return q.toString();
 }
