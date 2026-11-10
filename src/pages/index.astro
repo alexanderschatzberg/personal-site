@@ -33,7 +33,7 @@ const projects = (await getProjects()).slice(0, 3);
       {projects.map((p) => (
         <li class="row wrap">
           <a class="underline" href={projectHref(p) ?? '/projects/'}>{p.data.title}</a>
-          <span class="muted" set:html={inlineLinks(p.data.description)} />
+          <span class="muted inline-links" set:html={inlineLinks(p.data.description)} />
         </li>
       ))}
       <li class="more"><a href="/projects/">all projects →</a></li>

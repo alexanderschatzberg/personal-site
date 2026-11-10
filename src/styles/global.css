@@ -35,8 +35,27 @@ a { color: inherit; text-decoration: none; }
 img { max-width: 100%; display: block; }
 .muted { color: var(--muted); }
 .nowrap { white-space: nowrap; }
-.underline { border-bottom: 1px solid var(--rule); }
-.underline:hover { border-bottom-color: var(--fg); }
+/* Inline links: one style everywhere text links appear. */
+.underline, .prose a, .project-card p a, .inline-links a {
+  text-decoration: underline;
+  text-decoration-color: var(--muted);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+.underline:hover, .prose a:hover, .project-card p a:hover, .inline-links a:hover {
+  text-decoration-color: var(--fg);
+  text-decoration-thickness: 2px;
+}
+/* Links that leave the site get a small arrow. */
+.underline[href^="http"]::after, .prose a[href^="http"]::after,
+.project-card p a[href^="http"]::after, .inline-links a[href^="http"]::after {
+  content: '\2197';
+  content: '\2197' / '';
+  display: inline-block; /* keeps the underline off the arrow */
+  margin-left: 0.15em;
+  font-size: 0.85em;
+  color: var(--muted);
+}
 
 .shell {
   max-width: 760px;
@@ -181,6 +200,77 @@ img { max-width: 100%; display: block; }
   .photo-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
+/* Photo viewer: covers the page below the header, which stays pinned on top. */
+.viewer-open { overflow: hidden; }
+.viewer-open .site-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 11;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 24px;
+  background: var(--bg);
+}
+.viewer {
+  position: fixed;
+  inset: var(--viewer-top, 72px) 0 0;
+  z-index: 10;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  padding: 0 24px 24px;
+}
+.viewer[hidden] { display: none; }
+.viewer:focus { outline: none; }
+.viewer button:focus-visible { outline: 1px solid var(--rule); outline-offset: 2px; border-radius: 2px; }
+.viewer-stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+.viewer-img {
+  max-width: 100%;
+  max-height: 100%;
+  min-width: 0;
+  object-fit: contain;
+  border-radius: 4px;
+}
+.viewer button {
+  font: inherit;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  padding: 12px 4px;
+  cursor: pointer;
+}
+.viewer button:hover, .viewer button:focus-visible { color: var(--fg); }
+.viewer-bar {
+  max-width: 760px;
+  width: 100%;
+  margin: 0 auto;
+  padding-top: 12px;
+  display: flex;
+  align-items: baseline;
+  gap: 24px;
+}
+.viewer-close { margin-left: auto; }
+@media (max-width: 560px) {
+  .viewer { padding: 0 8px 16px; }
+  .viewer-stage { gap: 0; }
+  .viewer-side { position: absolute; top: 50%; transform: translateY(-50%); background: var(--bg) !important; padding: 8px !important; border-radius: 4px; }
+  .viewer-prev { left: 4px; }
+  .viewer-next { right: 4px; }
+  .viewer-hint { display: none; }
+}
+@media (hover: none) {
+  .viewer-hint { display: none; }
+}
+
 /* ---------- Essay page ---------- */
 .essay { max-width: 600px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 40px; }
 .essay-header { display: flex; flex-direction: column; gap: 12px; }
@@ -208,8 +298,6 @@ img { max-width: 100%; display: block; }
 }
 .prose > :first-child { margin-top: 0; }
 .prose p, .prose ul, .prose ol, .prose blockquote, .prose pre, .prose table, .prose figure { margin: 0 0 1.3em; }
-.prose a { text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 3px; text-decoration-thickness: 1px; }
-.prose a:hover { text-decoration-color: var(--fg); }
 .prose h1, .prose h2, .prose h3, .prose h4 { font-family: var(--mono); font-weight: 500; line-height: 1.4; }
 .prose h2 { font-size: 16px; margin: 2.4em 0 0.8em; }
 .prose h3 { font-size: 14px; margin: 2em 0 0.6em; }

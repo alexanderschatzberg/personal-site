@@ -19,8 +19,8 @@ const { title, description, image, imageAlt, url, demo } = project.data;
   <article class="essay">
     <header class="essay-header">
       <h1>{title}</h1>
-      <p class="essay-subtitle" set:html={inlineLinks(description)} />
-      {url && <a class="muted" href={url}>{url} ↗</a>}
+      <p class="essay-subtitle inline-links" set:html={inlineLinks(description)} />
+      {url && <a class="underline muted" href={url}>{url}</a>}
     </header>
     {demo
       ? <Demo name={demo} poster={image} alt={imageAlt} />
