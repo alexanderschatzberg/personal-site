@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { gaussianKernel, gridSpec, KERNEL_RADIUS, SIGMA_CELLS } from './shellfield';
-import { ISO_FRACTION, isoLevel, LatestWins, oneGalaxyLevel, pickShellHit, ShellBuilder, type CivShell } from './shells';
+import { choosePick, ISO_FRACTION, isoLevel, LatestWins, oneGalaxyLevel, pickShellHit, ShellBuilder, type CivShell, type ShellHit } from './shells';
 
 /** Small deterministic PRNG (mulberry32). */
 function rng(seed: number) {
@@ -125,6 +125,47 @@ describe('shell builder', () => {
   });
 });
 
+describe('galaxy or shell: which a tap opens (round 7 review, finding 2)', () => {
+  // Civ 0 owns galaxies 0 (x = 10) and 1 (x = 20); civ 1 owns 2 (x = 60) and 3 (x = 70); 4 is unclaimed.
+  const positions = Float32Array.from([10, 50, 50, 20, 50, 50, 60, 50, 50, 70, 50, 50, 61, 50, 50]);
+  const owner = Int32Array.from([0, 0, 1, 1, -1]);
+  const L = 100;
+  const hit = (civ: number, depth: number, x: number): ShellHit => ({ distance: depth, depth, civ, point: [x, 50, 50] });
+  const pick = (g: number, gDepth: number, hits: ShellHit[], own = owner) => choosePick(g, gDepth, hits, positions, own, L, false);
+
+  it('a galaxy in front of every other civ shell wins over the shells behind it', () => {
+    // Tapped civ-1 galaxy 2 at depth 3; civ 0's shell is hit behind it (depth 5, 8).
+    expect(pick(2, 3, [hit(0, 8, 12), hit(0, 5, 19)])).toBe(2);
+  });
+
+  it("a galaxy behind another civ's shell loses to the front-most shell hit (that civ, galaxy nearest the hit)", () => {
+    // Civ-1 galaxy 2 at depth 5, seen through civ 0's shell hit at depth 2 (point x = 19 → galaxy 1).
+    expect(pick(2, 5, [hit(1, 4, 58), hit(0, 2, 19)])).toBe(1);
+  });
+
+  it("its own civ's shell in front never hides a galaxy (every galaxy sits inside its own shell)", () => {
+    expect(pick(2, 5, [hit(1, 2, 75), hit(1, 9, 50)])).toBe(2);
+    // ... but another civ's shell in front of that still does.
+    expect(pick(2, 5, [hit(1, 3, 75), hit(0, 1, 11)])).toBe(0);
+  });
+
+  it('a shell hit level with the galaxy (within a small depth epsilon) does not hide it', () => {
+    expect(pick(2, 5, [hit(0, 5 * (1 - 1e-5), 19)])).toBe(2);
+    expect(pick(2, 5, [hit(0, 4.9, 19)])).toBe(1);
+  });
+
+  it('no galaxy in range → the front-most shell hit; no shell hit → the galaxy; neither → -1', () => {
+    expect(pick(-1, NaN, [hit(1, 4, 68), hit(0, 2, 19)])).toBe(1);
+    expect(pick(3, 7, [])).toBe(3);
+    expect(pick(-1, NaN, [])).toBe(-1);
+  });
+
+  it('a hiding shell whose civ holds nothing any more falls back to the galaxy', () => {
+    const gone = Int32Array.from([-1, -1, 1, 1, -1]);
+    expect(pick(2, 5, [hit(0, 2, 19)], gone)).toBe(2);
+  });
+});
+
 describe('shared walls (round 7 review, finding 1)', () => {
   // Two dense blobs, civ 0 round (30, 50, 50) and civ 1 round (52, 50, 50): close enough that
   // their independent shells would overlap by several cells.
@@ -198,8 +239,8 @@ describe('shell pick (criterion 52)', () => {
 
   it('prefers the front-most shell hit, whatever order the hits come in', () => {
     const hits = [
-      { distance: 9, civ: 0, point: [19, 50, 50] },
-      { distance: 4, civ: 1, point: [62, 50, 50] },
+      { distance: 9, depth: 9, civ: 0, point: [19, 50, 50] },
+      { distance: 4, depth: 4, civ: 1, point: [62, 50, 50] },
     ];
     expect(pickShellHit(hits, positions, owner, L, false)).toBe(2); // civ 1, nearest owned to 62 (not the unclaimed 61)
     expect(pickShellHit([hits[1], hits[0]], positions, owner, L, false)).toBe(2);
@@ -208,15 +249,15 @@ describe('shell pick (criterion 52)', () => {
 
   it('skips a hit whose civ no longer holds anything; no hit → -1', () => {
     const gone = Int32Array.from([0, 0, -1, -1, -1]);
-    expect(pickShellHit([{ distance: 1, civ: 1, point: [62, 50, 50] }, { distance: 3, civ: 0, point: [12, 50, 50] }], positions, gone, L, false)).toBe(0);
+    expect(pickShellHit([{ distance: 1, depth: 1, civ: 1, point: [62, 50, 50] }, { distance: 3, depth: 3, civ: 0, point: [12, 50, 50] }], positions, gone, L, false)).toBe(0);
     expect(pickShellHit([], positions, owner, L, false)).toBe(-1);
-    expect(pickShellHit([{ distance: 1, civ: 1, point: [62, 50, 50] }], positions, gone, L, false)).toBe(-1);
+    expect(pickShellHit([{ distance: 1, depth: 1, civ: 1, point: [62, 50, 50] }], positions, gone, L, false)).toBe(-1);
   });
 
   it('torus: nearest by the wrapped distance', () => {
     // Hit at x = 99 on civ 0: galaxy 0 (x = 10) is 11 away across the face, galaxy 1 (x = 20) 21.
-    expect(pickShellHit([{ distance: 1, civ: 0, point: [99, 50, 50] }], positions, owner, L, true)).toBe(0);
+    expect(pickShellHit([{ distance: 1, depth: 1, civ: 0, point: [99, 50, 50] }], positions, owner, L, true)).toBe(0);
     // Hit at x = 95 on civ 1: 70 is 25 away, 60 is 35 away; flat or wrapped.
-    expect(pickShellHit([{ distance: 1, civ: 1, point: [95, 50, 50] }], positions, owner, L, true)).toBe(3);
+    expect(pickShellHit([{ distance: 1, depth: 1, civ: 1, point: [95, 50, 50] }], positions, owner, L, true)).toBe(3);
   });
 });

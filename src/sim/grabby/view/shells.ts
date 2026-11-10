@@ -232,8 +232,10 @@ export class LatestWins<T> {
 }
 
 export interface ShellHit {
-  /** Distance from the camera (any unit, only compared). */
+  /** Distance from the camera along the ray (any unit, only compared). */
   distance: number;
+  /** Camera-space depth of the hit point (world units along the view axis), for choosePick. */
+  depth: number;
   civ: number;
   /** Hit point in the galaxies' own coordinates. */
   point: ArrayLike<number>;
@@ -263,6 +265,30 @@ export function pickShellHit(hits: ShellHit[], positions: ArrayLike<number>, own
     if (best >= 0) return best;
   }
   return -1;
+}
+
+/** A shell hit counts as in front of a galaxy only if nearer the camera by more than this
+ *  fraction of the galaxy's depth. */
+export const PICK_DEPTH_EPS = 1e-3;
+
+/**
+ * What a 3d tap opens, from the galaxy pick (`galaxy`, an owned galaxy within the pick radius on
+ * screen, or −1, at camera-space depth `galaxyDepth`) and the shell hits under the tap (depth in
+ * the same units). The galaxy wins unless another civ's shell surface lies in front of it (nearer
+ * by more than PICK_DEPTH_EPS·galaxyDepth): then the front-most shell hit wins (pickShellHit: its
+ * civ's owned galaxy nearest the hit point). Hits on the galaxy's own civ never hide it, since
+ * every owned galaxy sits inside its own closed shell; counting them would mean a tapped galaxy
+ * could never win. If the shells give nothing (no hit, or the civs hold nothing any more) the
+ * galaxy pick stands.
+ */
+export function choosePick(galaxy: number, galaxyDepth: number, hits: ShellHit[], positions: ArrayLike<number>, owner: ArrayLike<number>, L: number, periodic: boolean): number {
+  if (galaxy >= 0) {
+    const civ = owner[galaxy];
+    const front = galaxyDepth - PICK_DEPTH_EPS * Math.abs(galaxyDepth);
+    if (!hits.some((h) => h.civ !== civ && h.depth < front)) return galaxy;
+  }
+  const s = pickShellHit(hits, positions, owner, L, periodic);
+  return s >= 0 ? s : galaxy;
 }
 
 /** Display: shell opacity face-on and at grazing angles (fresnel rim), the rim's falloff power,

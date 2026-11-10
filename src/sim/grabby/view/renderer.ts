@@ -17,7 +17,7 @@ import { dotStyle } from './dots';
 import { donutRadii, donutSegment, embedPositions } from './donut';
 import { pickOwnedNear, projectForPick, ScreenGrid, torusVisible, type Facing } from './pick';
 import { ShellLayer } from './shellLayer';
-import { pickShellHit } from './shells';
+import { choosePick } from './shells';
 import { updateRanges } from './ranges';
 import { pendingRangeCap, UploadTracker } from './upload';
 
@@ -409,13 +409,6 @@ export class Renderer {
     this.scene.updateMatrixWorld();
     this.camera.updateMatrixWorld();
     const rect = this.renderer.domElement.getBoundingClientRect();
-    // 3d: a tap on a shell (front-most hit first) opens that civ, at its galaxy nearest the hit.
-    if (this.shells && this.bordersOn && rect.width > 0 && rect.height > 0) {
-      const ndc = new THREE.Vector2(((clientX - rect.left) / rect.width) * 2 - 1, -(((clientY - rect.top) / rect.height) * 2 - 1));
-      this.raycaster.setFromCamera(ndc, this.camera);
-      const g = pickShellHit(this.shells.hits(this.raycaster), r.positions, owner, r.params.sizeGly, r.params.geometry === 'torus');
-      if (g >= 0) return g;
-    }
     const viewProj = new THREE.Matrix4().multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse).elements;
     const model = this.content.matrixWorld.elements;
     const cam = this.camera.position;
@@ -439,7 +432,20 @@ export class Renderer {
     }
     const persp = this.camera instanceof THREE.PerspectiveCamera;
     const { grid, visible } = this.pickCache!;
-    return pickOwnedNear(grid, this.screenXY, persp ? this.depth : null, owner, clientX, clientY, maxPx, visible);
+    const galaxy = pickOwnedNear(grid, this.screenXY, persp ? this.depth : null, owner, clientX, clientY, maxPx, visible);
+    // 3d: the galaxy wins unless another civ's shell lies in front of it; then the front-most
+    // shell hit opens its civ, at its galaxy nearest the hit (see choosePick).
+    if (this.shells && this.bordersOn && rect.width > 0 && rect.height > 0) {
+      const ndc = new THREE.Vector2(((clientX - rect.left) / rect.width) * 2 - 1, -(((clientY - rect.top) / rect.height) * 2 - 1));
+      this.raycaster.setFromCamera(ndc, this.camera);
+      let gDepth = NaN;
+      if (galaxy >= 0) {
+        const p = new THREE.Vector3().fromArray(r.positions, 3 * galaxy).applyMatrix4(this.content.matrixWorld).applyMatrix4(this.camera.matrixWorldInverse);
+        gDepth = -p.z;
+      }
+      return choosePick(galaxy, gDepth, this.shells.hits(this.raycaster, this.camera), r.positions, owner, r.params.sizeGly, r.params.geometry === 'torus');
+    }
+    return galaxy;
   }
 
   /** Rendered world units per CSS pixel at the view's focus (the controls' target). */

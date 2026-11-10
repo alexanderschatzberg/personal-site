@@ -245,15 +245,18 @@ export class ShellLayer {
     this.group.visible = on;
   }
 
-  /** Shell hits along a ray (world space), with the hit points in the galaxies' own coordinates. */
-  hits(raycaster: THREE.Raycaster): ShellHit[] {
+  /** Shell hits along a ray (world space), with the hit points in the galaxies' own coordinates
+   *  and their camera-space depth. */
+  hits(raycaster: THREE.Raycaster, camera: THREE.Camera): ShellHit[] {
     if (!this.visible) return [];
     const meshes: THREE.Object3D[] = [];
     for (const m of this.civs.values()) if (m.cur) meshes.push(m.cur.mesh);
     this.group.updateWorldMatrix(true, true);
+    camera.updateMatrixWorld();
     return raycaster.intersectObjects(meshes, false).map((h) => {
+      const depth = -h.point.clone().applyMatrix4(camera.matrixWorldInverse).z;
       const p = this.group.worldToLocal(h.point.clone());
-      return { distance: h.distance, civ: h.object.userData.civ as number, point: [p.x, p.y, p.z] };
+      return { distance: h.distance, depth, civ: h.object.userData.civ as number, point: [p.x, p.y, p.z] };
     });
   }
 
