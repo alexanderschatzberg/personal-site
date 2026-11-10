@@ -97,3 +97,11 @@ State: round 6 implementing (Zel'dovich web, 3D speed)
   - Coverage gap: pick-cache staleness is correct by reading but has no renderer-level test.
   Gate: 195/195 tests, build OK.
 - 2026-11-09 Round 6: The user's screenshot showed the Voronoi web is wrong: cell interiors filled as petals with dark spokes, pile-up at the flat edges, and bridges drawn as long white border lines. 3D is too slow to simulate. The user chose the Zel'dovich approximation. Contract: added nBridges. One agent, U11, on the feature branch, which renders PNGs for the PM to inspect.
+- 2026-11-09 Round 6: U11 done (3 commits, 224k tokens: over budget but finished).
+  - The Zel'dovich web uses an n = +1 spectrum, with D·σ_δ = 2.1·clumpiness.
+  - The PM inspected the renders: 2D defaults, clumpiness 1 and a 3D slab all show filaments, knots and voids, a clear fix over the Voronoi petals.
+  - Voids keep about 1/6 of the mean density, a limit of pure Zel'dovich.
+  - Bridges never occur with this web (nBridges = 0 in practice); edgeList is tested on hand-made islands.
+  - The kd-tree kNN is exact (private hashes identical). 3D: 200k takes 0.94 s and 1M takes 5.4 s in Node, against 1.31 s and 9.3 s before.
+  - Recommendation: a 3D default of about 100k for the browser.
+  - Risk: the "3D 200k ≤ 1 s" perf test sits at 0.9–0.95 s under load and may flake.
