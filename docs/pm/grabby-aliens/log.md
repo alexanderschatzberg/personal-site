@@ -82,3 +82,10 @@ State: round 5 implementing (scale up)
   - Display constants: unchanged up to 50k galaxies. From 50k to 1M the dot floor goes 1.5 → 1 px and opacity goes to 0.55 (dark) / 0.7 (light). Dark mode blends additively from 200k.
   - Measured: the 1M tap pick takes 0.52 ms per tap after a grid build of ~35 ms per view change. At 200k, the worst playback frame is under 0.5 ms of CPU.
   - BorderSet memory went from ~52 to ~16 B per edge. The upload range cap now scales with buffer size.
+- 2026-11-09 Round 5: U9 (engine performance) done.
+  - The superlinear step was Borůvka bridges doing grid-ring scans. It is now an exact kd-tree search, and kNN cell pruning was added on top.
+  - 2D 500k went from 48 s to 3.1 s. 2D 1M takes 6.4 s, 3D 1M 7.1 s, sphere 500k 5.0 s.
+  - Peak memory at 2D 1M: ~530 MB including array buffers.
+  - Outputs are byte-identical: the H0=0 snapshot matches, and a 16-config private before/after hash agrees.
+  - The PM accepted these as spec-following, not weakening: snapshot cases pin galaxies 4000 (the count the hashes were made with), the default-seed tests got 120 s timeouts, and the structure 2d cases pin 4000.
+  - Merged U9 then U10. Gate: 195/195 tests, build OK.
