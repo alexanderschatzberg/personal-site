@@ -150,6 +150,26 @@ export class Space {
     }
   }
 
+  /**
+   * Lower bound on the squared gap, along one axis, between coordinate v and any point stored
+   * in cell index c (of g along that axis): minimum-image on the torus, and open-ended for the
+   * edge cells of a flat or sphere grid (those also hold clamped points). The small slack
+   * absorbs rounding in the cell assignment, so it never exceeds the true gap.
+   */
+  private gap2(v: number, c: number, g: number): number {
+    const cw = this.cw;
+    const lo = this.origin + c * cw, hi = lo + cw;
+    let gap: number;
+    if (this.torus) {
+      gap = Math.max(0, lo - v, v - hi);
+      gap = Math.min(gap, Math.max(0, this.size - Math.max(Math.abs(v - lo), Math.abs(v - hi))));
+    } else {
+      gap = Math.max(0, c === 0 ? 0 : lo - v, c === g - 1 ? 0 : v - hi);
+    }
+    gap -= 1e-6 * cw;
+    return gap > 0 ? gap * gap : 0;
+  }
+
   private cellCoords(i: number): [number, number, number] {
     const c = this.cellOf[i];
     const [gx, gy] = this.G;
@@ -175,42 +195,79 @@ export class Space {
     const items = this.cellItems;
     const starts = this.cellStart;
 
+    const [gx, gy, gz] = this.G;
+    const torus = this.torus;
+    const pos = this.pos;
+    const stamp = this.stamp;
+
     for (let i = 0; i < n; i++) {
       if (report && (i & 16383) === 0) report('neighbours', i / n);
       let found = 0;
-      const [cx, cy, cz] = this.cellCoords(i);
+      const c0 = this.cellOf[i];
+      const cx = c0 % gx, cy = Math.floor(c0 / gx) % gy, cz = Math.floor(c0 / (gx * gy));
+      const px = pos[3 * i], py = pos[3 * i + 1], pz = pos[3 * i + 2];
       // Ring r covers Chebyshev offset r. A point outside rings 0..r is at least r·cw away.
       // Cell stamps are fresh per ring, so torus wrap can revisit an earlier ring's cell;
       // the per-point `seen` stamp handles that.
+      // Cells are visited in the same order as visitCells(cx, cy, cz, r, r). Once k points
+      // are held, a cell (or row, or slab) whose nearest possible point is farther than the
+      // k-th best cannot change the result, so it is skipped without looking at its points;
+      // it would be skipped again on any revisit, since the k-th best only shrinks.
       const tag = i + 1;
       for (let r = 0; r <= rLimit; r++) {
-        this.visitCells(cx, cy, cz, r, r, (cell) => {
-          for (let q = starts[cell]; q < starts[cell + 1]; q++) {
-            const j = items[q];
-            if (j === i || seen[j] === tag) continue;
-            seen[j] = tag;
-            const d = this.rank2(i, j);
-            if (found < k) {
-              let p = found++;
-              while (p > 0 && bestD[p - 1] > d) {
-                bestD[p] = bestD[p - 1];
-                bestI[p] = bestI[p - 1];
-                p--;
+        const id = ++this.stampId;
+        const zr = gz === 1 ? 0 : r;
+        for (let dz = -zr; dz <= zr; dz++) {
+          let z = cz + dz;
+          if (torus) z = ((z % gz) + gz) % gz;
+          else if (z < 0 || z >= gz) continue;
+          const z2 = gz === 1 ? 0 : this.gap2(pz, z, gz);
+          if (found === k && z2 > bestD[k - 1]) continue;
+          for (let dy = -r; dy <= r; dy++) {
+            let y = cy + dy;
+            if (torus) y = ((y % gy) + gy) % gy;
+            else if (y < 0 || y >= gy) continue;
+            const zy2 = z2 + this.gap2(py, y, gy);
+            if (found === k && zy2 > bestD[k - 1]) continue;
+            const ady = Math.max(Math.abs(dz), Math.abs(dy));
+            // Inside the ring's shell only dx = ±r is on ring r.
+            const step = ady < r ? 2 * r : 1;
+            for (let dx = -r; dx <= r; dx += step) {
+              let x = cx + dx;
+              if (torus) x = ((x % gx) + gx) % gx;
+              else if (x < 0 || x >= gx) continue;
+              const cell = (z * gy + y) * gx + x;
+              if (stamp[cell] === id) continue;
+              stamp[cell] = id;
+              if (found === k && zy2 + this.gap2(px, x, gx) > bestD[k - 1]) continue;
+              for (let q = starts[cell]; q < starts[cell + 1]; q++) {
+                const j = items[q];
+                if (j === i || seen[j] === tag) continue;
+                seen[j] = tag;
+                const d = this.rank2(i, j);
+                if (found < k) {
+                  let p = found++;
+                  while (p > 0 && bestD[p - 1] > d) {
+                    bestD[p] = bestD[p - 1];
+                    bestI[p] = bestI[p - 1];
+                    p--;
+                  }
+                  bestD[p] = d;
+                  bestI[p] = j;
+                } else if (k > 0 && d < bestD[k - 1]) {
+                  let p = k - 1;
+                  while (p > 0 && bestD[p - 1] > d) {
+                    bestD[p] = bestD[p - 1];
+                    bestI[p] = bestI[p - 1];
+                    p--;
+                  }
+                  bestD[p] = d;
+                  bestI[p] = j;
+                }
               }
-              bestD[p] = d;
-              bestI[p] = j;
-            } else if (k > 0 && d < bestD[k - 1]) {
-              let p = k - 1;
-              while (p > 0 && bestD[p - 1] > d) {
-                bestD[p] = bestD[p - 1];
-                bestI[p] = bestI[p - 1];
-                p--;
-              }
-              bestD[p] = d;
-              bestI[p] = j;
             }
           }
-        });
+        }
         const reach = r * this.cw;
         if (found === k && bestD[k - 1] <= reach * reach) break;
       }
