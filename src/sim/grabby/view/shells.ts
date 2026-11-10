@@ -2,7 +2,7 @@
 // smooth surface per civ around its galaxies: density field (shellfield.ts) → marching cubes
 // (marching.ts). Plus the latest-wins job queue and the shell-hit pick.
 import { extract, Mesh } from './marching';
-import { buildField, gaussianKernel, gridSpec, KERNEL_RADIUS, SIGMA_CELLS } from './shellfield';
+import { buildField, type Field, gaussianKernel, gridSpec, KERNEL_RADIUS, SIGMA_CELLS } from './shellfield';
 
 /**
  * Iso level as a fraction of oneGalaxyLevel(): below one lone galaxy's own peak, so a lone owned
@@ -53,14 +53,31 @@ export interface CivShell {
   centroid: [number, number, number];
 }
 
-/** Builds every civ's shell for an owner snapshot. Holds the positions (as grid coordinates) and scratch. */
+/**
+ * Builds every civ's shell for an owner snapshot. Holds the positions (as grid coordinates) and scratch.
+ *
+ * Neighbours share one wall. Pass 1 builds each civ's windowed density f_c and folds it into
+ * global G³ arrays: the largest value at each grid point, whose it is, and the second largest.
+ * Pass 2 rewrites each civ's window as g_c = min(f_c − iso, f_c − other_c), where other_c is the
+ * largest density of any other civ there, and extracts g_c = 0. So g_c > 0 exactly where c's
+ * density is above the iso level and above every other civ's: the grid points of different civs'
+ * insides are disjoint. Where two territories touch (both densities above iso) g_c = f_c − f_o
+ * and g_o = f_o − f_c are exact negatives on the same grid values, so marching cubes puts both
+ * shells' vertices on the very same floats, with opposite normals. Each shell is still the
+ * closed, outward-facing surface of its own region, so the shared wall is drawn twice, once in
+ * each civ's colour (see SHARED_WALL_DRAWN_TWICE).
+ */
 export class ShellBuilder {
   readonly h: number;
   readonly margin: number;
   readonly iso = isoLevel();
   private coords: Float64Array;
   private gather: Float64Array;
-  private field: Float32Array;
+  /** Per civ: its window's data buffer, reused between builds. */
+  private bufs: Float32Array[] = [];
+  private top1: Float32Array;
+  private top2: Float32Array;
+  private arg: Int32Array;
   private mesh = new Mesh();
   private n: number;
 
@@ -77,11 +94,16 @@ export class ShellBuilder {
       this.coords[i] = x / h + margin;
     }
     this.gather = new Float64Array(3 * this.n);
-    this.field = new Float32Array(G * G * G);
+    this.top1 = new Float32Array(G * G * G);
+    this.top2 = new Float32Array(G * G * G);
+    this.arg = new Int32Array(G * G * G);
   }
 
-  /** One shell per civ in [0, civCount) that holds at least one galaxy, by civ id. */
-  build(owner: Int32Array, civCount: number): CivShell[] {
+  /**
+   * One shell per civ in [0, civCount) that holds at least one galaxy, by civ id. `inspect`, if
+   * given, sees each civ's field and level just before extraction (inside = field > level).
+   */
+  build(owner: Int32Array, civCount: number, inspect?: (civ: number, field: Field, level: number) => void): CivShell[] {
     const n = Math.min(this.n, owner.length);
     const start = new Int32Array(civCount + 1);
     for (let i = 0; i < n; i++) {
@@ -99,14 +121,42 @@ export class ShellBuilder {
       g[k + 1] = xyz[3 * i + 1];
       g[k + 2] = xyz[3 * i + 2];
     }
-    const out: CivShell[] = [];
     const { G, periodic } = this.opts;
+    // Pass 1: every civ's field, folded into the global largest / its owner / second largest.
+    const { top1, top2, arg } = this;
+    top1.fill(0);
+    top2.fill(0);
+    arg.fill(-1);
+    const fields: (Field | null)[] = [];
     for (let c = 0; c < civCount; c++) {
       const count = start[c + 1] - start[c];
-      if (count === 0) continue;
-      const f = buildField(g.subarray(3 * start[c], 3 * start[c + 1]), count, G, periodic, KERNEL, this.field);
+      const f = count === 0 ? null : buildField(g.subarray(3 * start[c], 3 * start[c + 1]), count, G, periodic, KERNEL, this.bufs[c]);
+      fields.push(f);
       if (!f) continue;
-      extract(f, this.iso, this.h, this.margin, this.mesh);
+      if (!this.bufs[c] || this.bufs[c].length < f.data.length) this.bufs[c] = f.data;
+      visit(f, (i, gi) => {
+        const v = f.data[i];
+        if (v > top1[gi]) {
+          top2[gi] = top1[gi];
+          top1[gi] = v;
+          arg[gi] = c;
+        } else if (v > top2[gi]) top2[gi] = v;
+      });
+    }
+    // Pass 2: g_c = min(f_c − iso, f_c − other_c), extracted at 0.
+    const out: CivShell[] = [];
+    const iso = this.iso;
+    for (let c = 0; c < civCount; c++) {
+      const f = fields[c];
+      if (!f) continue;
+      const d = f.data;
+      visit(f, (i, gi) => {
+        const v = d[i];
+        const other = arg[gi] === c ? top2[gi] : top1[gi];
+        d[i] = Math.min(v - iso, v - other);
+      });
+      inspect?.(c, f, 0);
+      extract(f, 0, this.h, this.margin, this.mesh);
       const { positions, normals } = this.mesh.take();
       if (positions.length === 0) continue;
       const centroid: [number, number, number] = [0, 0, 0];
@@ -115,6 +165,27 @@ export class ShellBuilder {
       out.push({ civ: c, positions, normals, centroid });
     }
     return out;
+  }
+}
+
+/** Shared walls are drawn twice, once in each civ's colour: each civ keeps one closed mesh. */
+export const SHARED_WALL_DRAWN_TWICE = true;
+
+/** Calls each(i, gi) for every point of a field's window: i its index in f.data, gi its index
+ *  in the global G³ grid (x fastest). */
+function visit(f: Field, each: (i: number, gi: number) => void) {
+  const { G, periodic } = f;
+  const [ax, ay, az] = f.ax;
+  const gx = new Int32Array(ax.m);
+  for (let a = 0; a < ax.m; a++) gx[a] = periodic ? (ax.o + a) % G : ax.o + a;
+  let i = 0;
+  for (let k = 0; k < az.m; k++) {
+    const gz = periodic ? (az.o + k) % G : az.o + k;
+    for (let j = 0; j < ay.m; j++) {
+      const gy = periodic ? (ay.o + j) % G : ay.o + j;
+      const row = (gz * G + gy) * G;
+      for (let a = 0; a < ax.m; a++, i++) each(i, row + gx[a]);
+    }
   }
 }
 

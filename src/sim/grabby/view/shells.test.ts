@@ -125,6 +125,54 @@ describe('shell builder', () => {
   });
 });
 
+describe('shared walls (round 7 review, finding 1)', () => {
+  // Two dense blobs, civ 0 round (30, 50, 50) and civ 1 round (52, 50, 50): close enough that
+  // their independent shells would overlap by several cells.
+  const L = 100, G = 48;
+  const rand = rng(5);
+  const pts: number[] = [], own: number[] = [];
+  for (const [c, cx] of [[0, 30], [1, 52]])
+    for (let i = 0; i < 1500; i++) {
+      // Uniform in a ball of radius 12.
+      let x, y, z;
+      do [x, y, z] = [rand() * 2 - 1, rand() * 2 - 1, rand() * 2 - 1];
+      while (x * x + y * y + z * z > 1);
+      pts.push(cx + 12 * x, 50 + 12 * y, 50 + 12 * z);
+      own.push(c);
+    }
+  const positions = Float32Array.from(pts), owner = Int32Array.from(own);
+
+  for (const periodic of [false, true])
+    it(`${periodic ? 'torus' : 'flat'}: the two shells meet in one wall (identical vertices, opposite normals), both stay watertight`, () => {
+      const [a, b] = new ShellBuilder(positions, { L, G, periodic }).build(owner, 2);
+      expect([a.civ, b.civ]).toEqual([0, 1]);
+      for (const s of [a, b]) for (const n of edgeUse(s.positions).values()) expect(n).toBe(2);
+      const key = (p: Float32Array, v: number) => `${p[3 * v]},${p[3 * v + 1]},${p[3 * v + 2]}`;
+      const inA = new Map<string, number>();
+      for (let v = 0; v < a.positions.length / 3; v++) inA.set(key(a.positions, v), v);
+      let shared = 0, opposite = 0;
+      const xs: number[] = [];
+      for (let v = 0; v < b.positions.length / 3; v++) {
+        const w = inA.get(key(b.positions, v));
+        if (w === undefined) continue;
+        shared++;
+        xs.push(b.positions[3 * v]);
+        const dot = a.normals[3 * w] * b.normals[3 * v] + a.normals[3 * w + 1] * b.normals[3 * v + 1] + a.normals[3 * w + 2] * b.normals[3 * v + 2];
+        if (dot < -0.9) opposite++;
+      }
+      // The wall is a disc round x ≈ 41 (half way), a good part of each shell, and nothing of
+      // either shell pokes through it into the other's side.
+      expect(shared).toBeGreaterThan(0.05 * (b.positions.length / 3));
+      expect(opposite).toBeGreaterThan(0.95 * shared);
+      for (const x of xs) expect(Math.abs(x - 41)).toBeLessThan(3);
+      let aPast = 0, bPast = 0;
+      for (let v = 0; v < a.positions.length / 3; v++) if (a.positions[3 * v] > 41 + 3) aPast++;
+      for (let v = 0; v < b.positions.length / 3; v++) if (b.positions[3 * v] < 41 - 3) bPast++;
+      expect(aPast).toBe(0);
+      expect(bPast).toBe(0);
+    });
+});
+
 describe('latest-wins job queue (criterion 50)', () => {
   it('sends at once when idle, keeps only the newest while busy, and drops stale snapshots', () => {
     const q = new LatestWins<string>();

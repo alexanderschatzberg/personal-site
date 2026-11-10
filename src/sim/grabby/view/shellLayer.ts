@@ -14,6 +14,7 @@ import {
   SHELL_FADE_MS,
   SHELL_RIM_OPACITY,
   SHELL_RIM_POWER,
+  SHARED_WALL_DRAWN_TWICE,
   type CivShell,
   type ShellHit,
 } from './shells';
@@ -85,7 +86,8 @@ export class ShellLayer {
     console.info(
       `[grabby] shells: G = ${G} for ${n} galaxies, σ = ${SIGMA_CELLS} cells (kernel radius ${KERNEL_RADIUS}), iso = ${isoLevel().toPrecision(3)} ` +
         `(${ISO_FRACTION} × one galaxy's mean blurred peak), ${periodic ? 'periodic' : 'flat'}; opacity ${SHELL_FACE_OPACITY} face-on → ${SHELL_RIM_OPACITY} ` +
-        `at grazing angles (power ${SHELL_RIM_POWER}), crossfade ${this.fadeMs} ms`,
+        `at grazing angles (power ${SHELL_RIM_POWER}), crossfade ${this.fadeMs} ms; touching territories share one wall, ` +
+        `${SHARED_WALL_DRAWN_TWICE ? 'drawn twice (once in each civ colour)' : 'drawn once'}`,
     );
     this.worker = new Worker(new URL('./shellWorker.ts', import.meta.url), { type: 'module' });
     this.worker.onmessage = (e: MessageEvent<ShellResponse>) => this.receive(e.data);
