@@ -463,3 +463,21 @@ The user chose the **Zel'dovich approximation**. The contract gained `SimResult.
 ## U11: one agent on the feature branch
 
 U11 owns `structure.ts`, `engine.ts`, `geometry.ts`, the engine tests, `view/borders.ts`, `view/renderer.ts` (borders only) and their tests. It must not change types.ts or the fixture JSON.
+
+## Round 6 fixes (U12, one agent)
+
+The user chose a 3D default of 100k. The contract gained `DEFAULT_GALAXIES_3D = 100000`.
+
+45. **View: 3D default.** The 3D default of 100k is used when dim = 3 and galaxies wasn't set explicitly:
+    - The URL has no `galaxies`.
+    - The user hasn't edited the field since the last default was applied.
+
+    Switching [2d]/[3d] swaps between the 2D and 3D defaults only while the field still shows an untouched default. On phones the phone default (50k) still wins whenever it is lower. The URL omits `galaxies` when it equals the default for the current dim. Pure logic is tested.
+46. **Perf tests aren't flaky.** Each timing test takes the minimum of 3 runs. The thresholds follow the new defaults:
+    - 3D 100k (the new default) ≤ 1 s
+    - 3D 1M ≤ 6 s
+    - 3D torus 100k ≤ 1 s
+
+    The other round-5 thresholds stay, as minimum of 3. This is a spec change, so it is not a weakening.
+47. **ψ sign is tested.** The correlation between ∇·ψ and δ must be negative, so matter converges on overdensities. The test must fail if ψ's sign is flipped; check this once by mutation.
+48. **Edge-strip criterion clarified by the PM.** Criterion 40's "±20%" means the mean over seeds; single seeds vary through cosmic variance. The existing test already does this (mean ±20%, each seed ±35%). Leave it, and record the clarification here.

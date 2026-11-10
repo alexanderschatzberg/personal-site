@@ -59,6 +59,10 @@ export interface Params {
   seed: string;
 }
 
+/** Default galaxy count when the view is in 3d and the user hasn't set one (3d simulates slower
+ *  per galaxy in the browser). DEFAULTS.galaxies is the 2d default. */
+export const DEFAULT_GALAXIES_3D = 100000;
+
 /** Real galaxies in the observable universe (order of magnitude, Conselice et al. 2016). */
 export const REAL_GALAXIES = 2e12;
 /** Age of the universe today. Only a fallback: with expansion on, "today" is SimResult.tToday. */

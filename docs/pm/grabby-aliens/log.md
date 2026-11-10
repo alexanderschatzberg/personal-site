@@ -105,3 +105,10 @@ State: round 6 implementing (Zel'dovich web, 3D speed)
   - The kd-tree kNN is exact (private hashes identical). 3D: 200k takes 0.94 s and 1M takes 5.4 s in Node, against 1.31 s and 9.3 s before.
   - Recommendation: a 3D default of about 100k for the browser.
   - Risk: the "3D 200k ≤ 1 s" perf test sits at 0.9–0.95 s under load and may flake.
+- 2026-11-09 Round 6 review (107k tokens): no correctness defects. The reviewer checked FFT, Hermitian symmetry, normalisation, the wrap and sphere; kd-tree kNN matched brute force on 414/414 cases.
+  - Major: perf tests flaky by design (3D 200k at 0.91–1.08 s against a 1 s limit).
+  - Minor: kNN differs from the old grid on exact-distance ties (duplicates or lattices only). The old code broke ties by visit order, the new one by index. Accepted and logged; real runs are unaffected.
+  - Minor: the edge-strip test holds the mean of the seeds to ±20%. The PM clarified that criterion 40 meant the mean.
+  - Minor: no test pins the ψ sign.
+  - Minor: uniform 2D kNN is slower (474 vs 291 ms at 200k). Accepted; the defaults are clustered.
+  The user chose a 3D default of 100k; DEFAULT_GALAXIES_3D was added. U12 handles the fixes.
