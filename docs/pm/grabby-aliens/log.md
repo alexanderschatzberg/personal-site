@@ -1,10 +1,12 @@
 # pm log: grabby aliens simulation
 
 Branch: `pm/grabby-aliens` · Plan: `plan.md` · Started: 2026-11-09
-State: round 6 implementing (Zel'dovich web, 3D speed)
+State: awaiting merge OK
 
 ## For the user
 
+- 2026-11-09 **review**: A link shared from a phone includes galaxies=50000. On a phone it then counts as an explicit choice, so [2d]/[3d] won't swap it to the 3D default.
+- 2026-11-09 **check**: The 3D 1M timing test has ~12% headroom (5.3 s against a 6 s limit) and may fail now and then on a busy machine.
 - 2026-11-09 **check**: At 1M galaxies, loading a finished run copies ~1M event objects from the worker to the page, so expect a short freeze after the progress bar and high memory. Try 1M in a browser. If it's bad, the fix is to send events as typed arrays, which is a contract change.
 - 2026-11-09 **check**: Donut picking assumes the donut points and the occluder share one transform, which is true today. If the donut drawing is ever restructured, re-check tap accuracy edge-on.
 - 2026-11-09 **review**: When the cosmic web leaves clumps no front can leave, the engine adds the fewest shortest 'bridge' links between them, so empires can cross voids. Without bridges, galaxies in an isolated clump could never be reached.
@@ -112,3 +114,7 @@ State: round 6 implementing (Zel'dovich web, 3D speed)
   - Minor: no test pins the ψ sign.
   - Minor: uniform 2D kNN is slower (474 vs 291 ms at 200k). Accepted; the defaults are clustered.
   The user chose a 3D default of 100k; DEFAULT_GALAXIES_3D was added. U12 handles the fixes.
+- 2026-11-09 Round 6 fixes: U12 done (a4dd7e8 dim-aware default, 8970c80 min-of-3 perf, 7addfce ψ-sign test, mutation-checked, eb207b1 edge-strip note).
+  - Perf, min of 3 under load: 3D 100k 471 ms, 3D 1M 5.3 s (12% headroom), 2D 1M 4.0 s.
+  - The PM killed an orphaned vitest worker (PID 69427, 2 h at 100% CPU, left by an earlier agent run). It probably caused one load-induced timeout in U12's second full run.
+  - Gate re-run by the PM: all green.
