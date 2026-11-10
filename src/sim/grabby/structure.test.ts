@@ -387,6 +387,64 @@ describe('the field and its FFT', () => {
     }
   });
 
+  it('ψ has the right sign: corr(∇·ψ, δ) < 0, so matter converges on overdensities (round 6, item 47)', () => {
+    // δ is rebuilt here from the web noise stream, independently of ψ: δ_k = noise_k · √P(k) with
+    // P(k) = k^n · exp(−k²R²), as in webField. The test above only checks |∇·ψ|, so a flipped ψ
+    // (matter fleeing overdensities) would pass it; this one would not.
+    const p = normalizeParams({ galaxies: 4000, webScaleGly: 30 });
+    const f = structure.webField(p);
+    const { n, L, psi } = f;
+    expect(f.d).toBe(2);
+    const total = n * n;
+    const re = new Float64Array(total), im = new Float64Array(total);
+    const rng = makeRng(`${p.seed}/web`);
+    for (let i = 0; i < total; i += 2) {
+      const r = Math.sqrt(-2 * Math.log(1 - rng()));
+      const a = 2 * Math.PI * rng();
+      re[i] = r * Math.cos(a);
+      re[i + 1] = r * Math.sin(a);
+    }
+    const grid2 = (inverse: boolean) => {
+      const lr = new Float64Array(n), li = new Float64Array(n);
+      for (const [stride, step] of [[1, n], [n, 1]]) {
+        for (let l = 0; l < n; l++) {
+          for (let i = 0; i < n; i++) (lr[i] = re[l * step + i * stride]), (li[i] = im[l * step + i * stride]);
+          structure.fft(lr, li, inverse);
+          for (let i = 0; i < n; i++) (re[l * step + i * stride] = lr[i]), (im[l * step + i * stride] = li[i]);
+        }
+      }
+    };
+    grid2(false);
+    const R = structure.smoothingRadius(effectiveWebScaleGly(p), 2);
+    const kf = (2 * Math.PI) / L, half = n / 2;
+    const wave = (j: number) => (j < half ? j : j - n) * kf;
+    for (let q = 0; q < total; q++) {
+      const jx = q % n, jy = Math.floor(q / n);
+      const k2 = wave(jx) ** 2 + wave(jy) ** 2;
+      const amp = q === 0 || jx === half || jy === half ? 0 : Math.sqrt(Math.pow(k2, structure.SPECTRAL_INDEX / 2) * Math.exp(-k2 * R * R));
+      re[q] *= amp;
+      im[q] *= amp;
+    }
+    grid2(true);
+    const delta = re; // real up to rounding
+
+    const h = L / n;
+    const at = (c: number, x: number, y: number) => psi[c][((y + n) % n) * n + ((x + n) % n)];
+    let sxy = 0, sxx = 0, syy = 0, sx = 0, sy = 0, count = 0;
+    for (let y = 0; y < n; y += 3) {
+      for (let x = 0; x < n; x += 3) {
+        const div = (at(0, x + 1, y) - at(0, x - 1, y) + at(1, x, y + 1) - at(1, x, y - 1)) / (2 * h);
+        const dl = delta[y * n + x];
+        sx += div; sy += dl; sxx += div * div; syy += dl * dl; sxy += div * dl;
+        count++;
+      }
+    }
+    const cov = sxy / count - (sx / count) * (sy / count);
+    const corr = cov / Math.sqrt((sxx / count - (sx / count) ** 2) * (syy / count - (sy / count) ** 2));
+    record('psi-sign-corr', { corr: +corr.toFixed(4) });
+    expect(corr).toBeLessThan(0);
+  });
+
   it('the displacement scale follows webScaleGly (rms ψ/σ_δ ∝ R)', () => {
     const rms = (webScaleGly: number) => {
       const f = structure.webField(normalizeParams({ webScaleGly, galaxies: 50000 }));
