@@ -1,7 +1,7 @@
 ---
 import Base from '../layouts/Base.astro';
 import { SITE } from '../site';
-import { getEssays, getProjects, formatDate, projectHref } from '../lib';
+import { getEssays, getProjects, formatDate, projectHref, inlineLinks } from '../lib';
 
 const essays = (await getEssays()).slice(0, 3);
 const projects = (await getProjects()).slice(0, 3);
@@ -27,7 +27,7 @@ const projects = (await getProjects()).slice(0, 3);
       {projects.map((p) => (
         <li class="row wrap">
           <a class="underline" href={projectHref(p) ?? '/projects/'}>{p.data.title}</a>
-          <span class="muted">{p.data.description}</span>
+          <span class="muted" set:html={inlineLinks(p.data.description)} />
         </li>
       ))}
       <li class="more"><a href="/projects/">all projects →</a></li>

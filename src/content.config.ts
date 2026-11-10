@@ -19,6 +19,7 @@ const projects = defineCollection({
   loader: glob({ pattern: '**/*.md', base: './src/content/projects' }),
   schema: z.object({
     title: z.string(),
+    // One or two sentences. Markdown links like [text](https://…) become links on the card.
     description: z.string(),
     // Path to an image in public/, e.g. "/images/projects/my-project.jpg"
     image: z.string().optional(),
@@ -29,7 +30,9 @@ const projects = defineCollection({
     url: z.string().optional(),
     // Name of a three.js demo in src/demos/ (without .ts). Gives the project its own page.
     demo: z.string().optional(),
-    // Lower numbers show first.
+    // When it shipped. Projects are listed newest first; undated ones go last.
+    date: z.coerce.date().optional(),
+    // Tie-break for projects with the same date (or none): lower numbers show first.
     order: z.number().default(100),
     draft: z.boolean().default(false),
   }),

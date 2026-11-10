@@ -126,6 +126,9 @@ img { max-width: 100%; display: block; }
 /* Makes the whole card clickable when it has a link */
 .project-card h2 a::after { content: ''; position: absolute; inset: 0; }
 .project-card p { margin: 0; color: var(--muted); }
+.project-card time { color: var(--muted); font-size: 13px; }
+/* Sit above the title's stretched link so they stay clickable. */
+.project-card p a { position: relative; z-index: 1; color: var(--fg); }
 
 .image-placeholder {
   display: flex;

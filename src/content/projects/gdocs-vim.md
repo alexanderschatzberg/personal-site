@@ -5,6 +5,7 @@ image: /images/projects/gdocs-vim.svg
 imageAlt: Vim for Google Docs logo
 imageFit: contain
 url: https://github.com/alexanderschatzberg/gdocs-vim
+date: 2026-11-03
 order: 1
 ---
 

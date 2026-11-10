@@ -2,7 +2,7 @@
 import { render } from 'astro:content';
 import Base from '../../layouts/Base.astro';
 import Demo from '../../components/Demo.astro';
-import { getProjects, projectHasPage } from '../../lib';
+import { getProjects, projectHasPage, inlineLinks, plainText } from '../../lib';
 
 export async function getStaticPaths() {
   const projects = await getProjects();
@@ -15,11 +15,11 @@ const { project } = Astro.props;
 const { Content } = await render(project);
 const { title, description, image, imageAlt, url, demo } = project.data;
 ---
-<Base title={title} description={description} path="projects">
+<Base title={title} description={plainText(description)} path="projects">
   <article class="essay">
     <header class="essay-header">
       <h1>{title}</h1>
-      <p class="essay-subtitle">{description}</p>
+      <p class="essay-subtitle" set:html={inlineLinks(description)} />
       {url && <a class="muted" href={url}>{url} ↗</a>}
     </header>
     {demo

@@ -1,10 +1,10 @@
 ---
 import type { CollectionEntry } from 'astro:content';
-import { projectHref } from '../lib';
+import { formatDate, inlineLinks, projectHref } from '../lib';
 
 interface Props { project: CollectionEntry<'projects'> }
 const { project } = Astro.props;
-const { title, description, image, imageAlt, imageFit } = project.data;
+const { title, description, image, imageAlt, imageFit, date } = project.data;
 const href = projectHref(project);
 ---
 <article class="project-card">
@@ -12,7 +12,8 @@ const href = projectHref(project);
     ? <img class={`fit-${imageFit}`} src={image} alt={imageAlt ?? ''} loading="lazy" />
     : <div class="image-placeholder" aria-hidden="true">[image]</div>}
   <div class="project-card-text">
+    {date && <time datetime={date.toISOString()}>{formatDate(date)}</time>}
     <h2>{href ? <a href={href}>{title}</a> : title}</h2>
-    <p>{description}</p>
+    <p set:html={inlineLinks(description)} />
   </div>
 </article>
