@@ -107,8 +107,47 @@ interface Candidate {
   baseMight: number;
 }
 
+/** Progress callback: the current stage's name and the overall fraction done, in [0, 1]. The
+ *  fraction never goes backwards; the last call is ('done', 1). */
+export type ProgressFn = (stage: string, frac: number) => void;
+
+/** Each stage's share of the overall fraction, roughly its share of the run time at scale. */
+const STAGE_WEIGHTS: [string, number][] = [
+  ['positions', 0.02],
+  ['web', 0.2],
+  ['neighbours', 0.33],
+  ['bridges', 0.1],
+  ['graph', 0.08],
+  ['origins', 0.02],
+  ['events', 0.25],
+];
+
+function progressReporter(onProgress: ProgressFn | undefined): (stage: string, frac: number) => void {
+  if (!onProgress) return () => {};
+  const base = new Map<string, [number, number]>();
+  let acc = 0;
+  for (const [name, w] of STAGE_WEIGHTS) {
+    base.set(name, [acc, w]);
+    acc += w;
+  }
+  let last = 0;
+  return (stage, frac) => {
+    const [b, w] = stage === 'done' ? [1, 0] : (base.get(stage) ?? [last, 0]);
+    const f = Math.min(1, Math.max(last, b + w * Math.min(1, Math.max(0, frac))));
+    last = f;
+    onProgress(stage, f);
+  };
+}
+
 export function simulate(input: Partial<Params>): SimResult {
+  return simulateWithProgress(input);
+}
+
+/** simulate, reporting progress at stage boundaries and periodically inside long loops. */
+export function simulateWithProgress(input: Partial<Params>, onProgress?: ProgressFn): SimResult {
+  const report = progressReporter(onProgress);
   const p = normalizeParams(input);
+  report('positions', 0);
   const rng = makeRng(p.seed);
   const n = p.galaxies;
 
@@ -134,25 +173,35 @@ export function simulate(input: Partial<Params>): SimResult {
 
   // Cosmic web (round 4): displaces the uniform draw; uses its own RNG stream, so the main
   // stream continues identically at every clumpiness. clumpiness 0 leaves it untouched.
-  applyCosmicWeb(positions, p);
+  report('web', 0);
+  applyCosmicWeb(positions, p, (f) => report('web', f));
 
   // 4–5. Metric and neighbour graph.
   const space = new Space(positions, p.dim, p.geometry, p.sizeGly);
-  const graph = space.neighbours(p.dim === 3 ? 12 : 8);
-  const edgeList: number[] = [];
+  report('neighbours', 0);
+  const graph = space.neighbours(p.dim === 3 ? 12 : 8, report);
+  // Each pair once, i < j, in CSR order; counted first so no growable array is needed.
+  let edgeCount = 0;
   for (let i = 0; i < n; i++) {
+    for (let e = graph.start[i]; e < graph.start[i + 1]; e++) if (i < graph.adj[e]) edgeCount++;
+  }
+  const edges = new Uint32Array(2 * edgeCount);
+  for (let i = 0, w = 0; i < n; i++) {
     for (let e = graph.start[i]; e < graph.start[i + 1]; e++) {
       const j = graph.adj[e];
-      if (i < j) edgeList.push(i, j);
+      if (i < j) {
+        edges[w++] = i;
+        edges[w++] = j;
+      }
     }
   }
-  const edges = Uint32Array.from(edgeList);
 
   // Expansion. Distances on `positions` are comoving; a front at speed v covers comoving
   // distance d in conformal time d / v, i.e. dχ/dt = v / a(t).
   const cosmo = makeCosmology(p.H0, p.omegaLambda, p.tEndGyr);
 
   // 6. Origin candidates.
+  report('origins', 0);
   const q = 1 - Math.exp((-p.pLife * p.planetsPerGalaxy * REAL_GALAXIES) / n);
   // Life can only arise inside the life window (density ∝ t^hardSteps on [0, tWindow]).
   const tWindow = Math.min(p.lifeWindowGyr, p.tEndGyr);
@@ -247,8 +296,11 @@ export function simulate(input: Partial<Params>): SimResult {
 
   // Every queued entry is at or before tEnd, so the queue runs until it is empty. Arises on
   // already-owned galaxies are skipped on pop and do not count as events.
+  report('events', 0);
   let tLast = 0;
+  let pops = 0;
   while (queue.size > 0) {
+    if ((++pops & 65535) === 0) report('events', events.length / n);
     const id = queue.pop();
     const t = queue.t[id];
     const g = queue.g[id];
@@ -334,6 +386,7 @@ export function simulate(input: Partial<Params>): SimResult {
   }
 
   const tEndRun = cutByCap ? p.tEndGyr : tLast;
+  report('done', 1);
   return {
     params: p,
     positions,

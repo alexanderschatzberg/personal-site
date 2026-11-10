@@ -7,14 +7,16 @@
 // Round 4: the default tEndGyr became 5000 and clumpiness (cosmic web) was added, so every case
 // pins clumpiness: 0 (uniform positions, same RNG order) and its round-1 tEndGyr (200 for the
 // defaults).
+// Round 5: the default galaxy count became 200000, so the defaults_* cases pin the round-1
+// default of 4000 galaxies.
 
 import { createHash } from 'node:crypto';
 import type { Params, SimResult } from '../types';
 
 export const STATIC_CASES: Record<string, Partial<Params>> = {
-  defaults_5eed: { H0: 0, clumpiness: 0, tEndGyr: 200, lifeWindowGyr: 200, seed: '5eed' },
-  defaults_a: { H0: 0, clumpiness: 0, tEndGyr: 200, lifeWindowGyr: 200, seed: 'a' },
-  defaults_b: { H0: 0, clumpiness: 0, tEndGyr: 200, lifeWindowGyr: 200, seed: 'b' },
+  defaults_5eed: { H0: 0, clumpiness: 0, galaxies: 4000, tEndGyr: 200, lifeWindowGyr: 200, seed: '5eed' },
+  defaults_a: { H0: 0, clumpiness: 0, galaxies: 4000, tEndGyr: 200, lifeWindowGyr: 200, seed: 'a' },
+  defaults_b: { H0: 0, clumpiness: 0, galaxies: 4000, tEndGyr: 200, lifeWindowGyr: 200, seed: 'b' },
   busy_torus_x: {
     H0: 0, clumpiness: 0, geometry: 'torus', galaxies: 1500, sizeGly: 60, pLife: 1e-20, tEndGyr: 120, lifeWindowGyr: 120,
     temperMean: 0.8, seed: 'x',

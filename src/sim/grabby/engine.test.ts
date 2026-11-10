@@ -172,7 +172,7 @@ describe('simulate', () => {
       expect(c).toBeGreaterThanOrEqual(3);
       expect(c).toBeLessThanOrEqual(80);
     }
-  });
+  }, 120000);
 
   it('50k galaxies in 3d finishes in under ~3 s', () => {
     const t0 = performance.now();
