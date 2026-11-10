@@ -30,7 +30,7 @@ const projects = defineCollection({
     url: z.string().optional(),
     // Name of a three.js demo in src/demos/ (without .ts). Gives the project its own page.
     demo: z.string().optional(),
-    // When it shipped. Projects are listed newest first; undated ones go last.
+    // When it was completed. Projects are listed newest first; undated ones go last.
     date: z.coerce.date().optional(),
     // Tie-break for projects with the same date (or none): lower numbers show first.
     order: z.number().default(100),

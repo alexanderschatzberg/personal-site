@@ -128,10 +128,11 @@ img { max-width: 100%; display: block; }
 }
 
 /* ---------- Project cards ---------- */
+/* One project per row, full width, newest at the top. */
 .project-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
 }
 .project-card {
   position: relative;
@@ -145,14 +146,14 @@ img { max-width: 100%; display: block; }
 }
 .project-card:hover { border-color: var(--fg); }
 .project-card img, .project-card .image-placeholder {
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 16 / 9;
   width: 100%;
   object-fit: cover;
   border-bottom: 1px solid var(--rule);
 }
-.project-card img.fit-contain { object-fit: contain; padding: 15% 20%; background: var(--code); }
-.project-card-text { padding: 14px 16px 18px; display: flex; flex-direction: column; gap: 4px; }
-.project-card h2 { margin: 0; font-size: 14px; font-weight: 500; }
+.project-card img.fit-contain { object-fit: contain; padding: 10% 25%; background: var(--code); }
+.project-card-text { padding: 20px 24px 24px; display: flex; flex-direction: column; gap: 6px; }
+.project-card h2 { margin: 0; font-size: 16px; font-weight: 500; }
 /* Makes the whole card clickable when it has a link */
 .project-card h2 a::after { content: ''; position: absolute; inset: 0; }
 .project-card p { margin: 0; color: var(--muted); }
