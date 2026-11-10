@@ -16,6 +16,18 @@ export interface UploadAttr {
  *  never uploaded (three skips invisible objects), so without this cap ranges would pile up
  *  for as long as it stays hidden. */
 export const MAX_PENDING_RANGES = 64;
+/** Most pending ranges for a big buffer (three merges adjacent ones before bufferSubData). */
+export const MAX_PENDING_RANGES_BIG = 1024;
+/** Rough cost of one bufferSubData call, in buffer elements uploaded (a display guess, not
+ *  measured): a buffer allows one pending range per this many elements, within the caps above. */
+export const RANGE_COST_ELEMENTS = 2048;
+
+/** Pending ranges a buffer of `elements` allows before going full. Small buffers keep the old
+ *  cap of 64; a 1M-galaxy colour buffer allows MAX_PENDING_RANGES_BIG, so one playback frame's
+ *  few hundred scattered changes stay a partial upload instead of resending all 12 MB. */
+export function pendingRangeCap(elements: number): number {
+  return Math.max(MAX_PENDING_RANGES, Math.min(MAX_PENDING_RANGES_BIG, Math.floor(elements / RANGE_COST_ELEMENTS)));
+}
 
 export class UploadTracker {
   /** A full upload is pending. True until the first upload, which is always full. */
@@ -23,7 +35,11 @@ export class UploadTracker {
   /** Ranges added since the last upload. */
   private pending = 0;
 
-  constructor(private attr: UploadAttr) {
+  constructor(
+    private attr: UploadAttr,
+    /** Pending ranges past which the next mark goes full. */
+    private maxRanges = MAX_PENDING_RANGES,
+  ) {
     attr.onUpload(() => {
       this.full = false;
       this.pending = 0;
@@ -34,7 +50,7 @@ export class UploadTracker {
   markRange(start: number, count: number) {
     if (count <= 0) return;
     if (!this.full) {
-      if (this.pending >= MAX_PENDING_RANGES) return this.markFull();
+      if (this.pending >= this.maxRanges) return this.markFull();
       this.attr.addUpdateRange(start, count);
       this.pending++;
     }

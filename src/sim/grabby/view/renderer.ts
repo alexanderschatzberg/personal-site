@@ -16,7 +16,7 @@ import { dotStyle } from './dots';
 import { donutRadii, donutSegment, embedPositions } from './donut';
 import { pickOwnedNear, projectForPick, ScreenGrid, torusVisible, type Facing } from './pick';
 import { updateRanges } from './ranges';
-import { UploadTracker } from './upload';
+import { pendingRangeCap, UploadTracker } from './upload';
 
 const css = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 const isDark = () => document.documentElement.dataset.theme === 'dark';
@@ -263,7 +263,7 @@ export class Renderer {
     this.colors = new Float32Array(n * 3);
     const colorAttr = new THREE.BufferAttribute(this.colors, 3).setUsage(THREE.DynamicDrawUsage);
     geo.setAttribute('color', colorAttr);
-    this.colorUpload = new UploadTracker(colorAttr);
+    this.colorUpload = new UploadTracker(colorAttr, pendingRangeCap(n * 3));
     this.points = new THREE.Points(geo, this.material);
     this.points.frustumCulled = false;
     this.content.add(this.points);
