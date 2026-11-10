@@ -15,6 +15,7 @@ import { LANDSCAPE_MQ, PORTRAIT_MQ, type Layout } from './layout';
 import { civColor } from './palette';
 import { capGalaxies, isPhone, PHONE_GALAXY_CAP, phoneParams } from './phone';
 import { isTap, PICK_RADIUS_PX } from './pick';
+import { progressText } from './progress';
 import { Renderer } from './renderer';
 import { cycleSnap, snapAfterDrag, snapHeights, stepSnap, type Snap } from './sheet';
 import { clampNum, clipSeed, paramsToQuery, queryToParams } from './url';
@@ -84,6 +85,10 @@ export function mount(root: HTMLElement) {
     out.status.textContent = '[simulating…]';
     worker.onmessage = (e: MessageEvent<WorkerResponse>) => {
       if (e.data.id !== id) return;
+      if ('progress' in e.data) {
+        out.status.textContent = progressText(e.data.progress.stage, e.data.progress.frac);
+        return;
+      }
       worker?.terminate();
       worker = undefined;
       root.dataset.busy = 'false';
