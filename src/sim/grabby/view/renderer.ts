@@ -12,6 +12,7 @@ import type { SimResult, Timeline } from '../types';
 import { BorderSet, SEGMENT_FRACTION, slotFrame, slotSegment, type Space } from './borders';
 import { civColor } from './palette';
 import { MAX_PIXEL_RATIO } from './phone';
+import { dotStyle } from './dots';
 import { donutRadii, donutSegment, embedPositions } from './donut';
 import { pickOwned, projectForPick, type Facing } from './pick';
 import { updateRanges } from './ranges';
@@ -39,10 +40,6 @@ function dotTexture() {
   return t;
 }
 
-/** Point size in CSS pixels: fewer, bigger dots for small runs. three applies the pixel ratio. */
-function pointSize(n: number): number {
-  return Math.max(1.5, Math.min(4, 3 * Math.sqrt(4000 / Math.max(1, n))));
-}
 
 /**
  * Border drawing. 2d and sphere: one LineSegments (2 vertices per active slot). 3d: one
@@ -263,7 +260,6 @@ export class Renderer {
     const colorAttr = new THREE.BufferAttribute(this.colors, 3).setUsage(THREE.DynamicDrawUsage);
     geo.setAttribute('color', colorAttr);
     this.colorUpload = new UploadTracker(colorAttr);
-    this.material.size = pointSize(n);
     this.points = new THREE.Points(geo, this.material);
     this.points.frustumCulled = false;
     this.content.add(this.points);
@@ -454,7 +450,25 @@ export class Renderer {
     this.civColors = (this.result?.civs ?? []).map((c) => new THREE.Color(civColor(c.id, dark)));
     if (this.outline) (this.outline.material as THREE.LineBasicMaterial).color.setStyle(css('--rule'));
     if (this.occluder) (this.occluder.material as THREE.MeshBasicMaterial).color.setStyle(css('--bg'));
+    this.applyDots(dark);
     this.request();
+  }
+
+  /** Dot size, opacity and blending for this run's count and the theme (see dots.ts). */
+  private applyDots(dark: boolean) {
+    const m = this.material;
+    const d = dotStyle(this.result ? this.result.positions.length / 3 : 0, dark);
+    const translucent = d.opacity < 1;
+    const blending = d.additive ? THREE.AdditiveBlending : THREE.NormalBlending;
+    // alphaTest compares the texel's alpha × opacity: scale it so the round dot's edge survives.
+    const alphaTest = 0.5 * d.opacity;
+    if (m.transparent !== translucent || m.blending !== blending || m.alphaTest !== alphaTest) m.needsUpdate = true;
+    m.size = d.size;
+    m.opacity = d.opacity;
+    m.transparent = translucent;
+    m.depthWrite = !translucent;
+    m.blending = blending;
+    m.alphaTest = alphaTest;
   }
 
   private resize() {
