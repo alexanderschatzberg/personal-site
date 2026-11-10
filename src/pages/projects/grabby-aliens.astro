@@ -1,0 +1,398 @@
+---
+import Base from '../../layouts/Base.astro';
+import { DEFAULTS, RANGES } from '../../sim/grabby/types';
+import { FIELDS, fmt, TABS, toInput } from '../../sim/grabby/view/fields';
+import { HELP } from '../../sim/grabby/view/help';
+
+const basic = FIELDS.filter((f) => f.group === 'basic');
+const advanced = FIELDS.filter((f) => f.group === 'advanced');
+---
+<Base title="Grabby Aliens" description="A simulation of grabby civilizations spreading through a universe of galaxies." bare>
+  <div class="grabby" data-busy="true">
+    <div class="g-stage" aria-label="Simulation view" role="img"></div>
+
+    <header class="g-top">
+      <a class="g-home" href="/projects/"><span class="g-home-long">← zander schatzberg <span class="muted">~/projects/grabby-aliens</span></span><span class="g-home-short">← grabby aliens</span></a>
+      <div class="g-bar" role="toolbar" aria-label="View">
+        <div class="g-view">
+        <button class="btn" type="button" data-dim="2" aria-pressed="true">[2d]</button>
+        <button class="btn" type="button" data-dim="3" aria-pressed="false">[3d]</button>
+        <span class="sep" aria-hidden="true">·</span>
+        <button class="btn" type="button" data-geometry="flat" aria-pressed="true">[flat]</button>
+        <button class="btn" type="button" data-geometry="torus" aria-pressed="false">[torus]</button>
+        <button class="btn" type="button" data-geometry="sphere" aria-pressed="false" title="Sphere is 2d only">[sphere]</button>
+        <span class="sep" aria-hidden="true">·</span>
+        <button class="btn g-borders" type="button" aria-pressed="true">[borders]</button>
+        <button class="btn g-reset-view" type="button">[reset view]</button>
+        </div>
+        <span class="sep" aria-hidden="true">·</span>
+        <button class="btn g-drawer-toggle" type="button" aria-expanded="false" aria-controls="g-params">[params]</button>
+        <button class="btn theme-toggle" type="button" aria-label="Toggle dark mode">[dark]</button>
+      </div>
+    </header>
+
+    <div class="g-readout" aria-live="off">
+      <span><span class="g-time">0.0</span> Gyr</span>
+      <span><span class="g-claimed">0</span>% of galaxies claimed</span>
+      <span><span class="g-alive">0</span> civilizations alive</span>
+      <span class="g-ended"></span>
+      <span class="g-wrap" hidden>cube faces wrap: leaving one face re-enters from the opposite one</span>
+      <span class="g-mini"><span class="g-mini-time">0.0</span> Gyr · <span class="g-mini-pct">0</span>%</span>
+      <span class="g-status" role="status" aria-live="polite"></span>
+    </div>
+
+    <div class="g-note" hidden>
+      <span>heavy run · may be slow on this device</span>
+      <button class="btn g-note-close" type="button" aria-label="Dismiss">[×]</button>
+    </div>
+
+    <section class="g-info" aria-label="Galaxy info" hidden>
+      <div class="g-row g-info-head">
+        <span class="g-info-title"><span class="g-swatch" aria-hidden="true"></span><span class="g-info-name"></span></span>
+        <button class="btn g-info-close" type="button" aria-label="Close galaxy info">[×]</button>
+      </div>
+      <dl class="g-info-list">
+        <div><dt>arose</dt><dd class="g-info-t0"></dd></div>
+        <div><dt>speed</dt><dd class="g-info-speed"></dd></div>
+        <div><dt>temperament</dt><dd class="g-info-temper"></dd></div>
+        <div><dt>base might</dt><dd class="g-info-base"></dd></div>
+        <div><dt class="g-info-model">might now</dt><dd class="g-info-might"></dd></div>
+        <div><dt>holds</dt><dd class="g-info-held"></dd></div>
+      </dl>
+    </section>
+
+    <aside class="g-drawer" id="g-params" aria-label="Parameters" hidden>
+      <button class="g-handle" type="button" aria-expanded="false" aria-controls="g-sheet-body" aria-label="Parameters sheet"><span class="g-grip" aria-hidden="true"></span></button>
+      <form class="g-form" id="g-sheet-body" data-tab={TABS[0]} novalidate>
+        <div class="g-tabs" role="tablist" aria-label="Parameter groups">
+          {TABS.map((t, i) => (
+            <button class="btn g-tab" type="button" role="tab" data-tab={t} aria-selected={i === 0 ? 'true' : 'false'} tabindex={i === 0 ? 0 : -1}>{t}</button>
+          ))}
+        </div>
+        <div class="g-scroll">
+        <div class="g-sheet-view" role="toolbar" aria-label="View"></div>
+        <span class="muted g-params-label">── params</span>
+        {basic.map((f) => {
+          const [lo, hi] = RANGES[f.key];
+          const id = `g-${f.key}`;
+          return (
+            <div class="g-field g-number" data-model={f.model} data-group={f.group}>
+              <span class="g-row g-lab"><label for={id}>{f.label}</label>{HELP[f.key] && <button class="btn g-help" type="button" data-help={f.key} aria-label={`About ${f.label}`} aria-expanded="false">[?]</button>}</span>
+              <span class="g-num">
+                <input id={id} name={f.key} class="field" type="number" inputmode="decimal" min={lo} max={hi} step="any" value={toInput(DEFAULTS[f.key])} />
+                {f.unit && <span class="muted">{f.unit}</span>}
+              </span>
+              {f.slider !== undefined && (
+                <input class="g-slider" type="range" data-slider={f.key} min={lo} max={hi} step={f.slider} value={DEFAULTS[f.key]} aria-label={`${f.label} slider`} tabindex="-1" />
+              )}
+              <span class="g-hint">range {fmt(lo)} – {fmt(hi)}{f.unit ? ` ${f.unit}` : ''}{f.note ? ` · ${f.note}` : ''}</span>
+            </div>
+          );
+        })}
+        <div class="g-field" data-group="basic">
+          <label class="g-row" for="g-seed"><span>seed</span>
+            <input id="g-seed" name="seed" class="field" type="text" maxlength="64" spellcheck="false" autocomplete="off" value={DEFAULTS.seed} />
+          </label>
+        </div>
+        <button class="btn g-adv-toggle" type="button" aria-expanded="false" aria-controls="g-advanced">[+ advanced]</button>
+        <div class="g-advanced" id="g-advanced" role="group" aria-label="Advanced parameters">
+        {advanced.map((f) => {
+          const [lo, hi] = RANGES[f.key];
+          const id = `g-${f.key}`;
+          return (
+            <div class="g-field g-number" data-model={f.model} data-group={f.group}>
+              <span class="g-row g-lab"><label for={id}>{f.label}</label>{HELP[f.key] && <button class="btn g-help" type="button" data-help={f.key} aria-label={`About ${f.label}`} aria-expanded="false">[?]</button>}</span>
+              <span class="g-num">
+                <input id={id} name={f.key} class="field" type="number" inputmode="decimal" min={lo} max={hi} step="any" value={toInput(DEFAULTS[f.key])} />
+                {f.unit && <span class="muted">{f.unit}</span>}
+              </span>
+              {f.slider !== undefined && (
+                <input class="g-slider" type="range" data-slider={f.key} min={lo} max={hi} step={f.slider} value={DEFAULTS[f.key]} aria-label={`${f.label} slider`} tabindex="-1" />
+              )}
+              <span class="g-hint">range {fmt(lo)} – {fmt(hi)}{f.unit ? ` ${f.unit}` : ''}{f.note ? ` · ${f.note}` : ''}</span>
+              {f.key === 'webScaleGly' && <span class="g-hint g-web-note" aria-live="polite" hidden></span>}
+            </div>
+          );
+        })}
+        <div class="g-field" data-group="advanced">
+          <span class="g-row g-lab"><label for="g-mightModel">might model</label><button class="btn g-help" type="button" data-help="mightModel" aria-label="About might model" aria-expanded="false">[?]</button></span>
+          <select id="g-mightModel" name="mightModel" class="field">
+            <option value="power">power: base·N^α</option>
+            <option value="log">log: base·ln(1+N)</option>
+            <option value="frontier">frontier: nearby own</option>
+          </select>
+        </div>
+        <div class="g-field g-row" data-group="advanced">
+          <button class="btn g-no-expansion" type="button">[no expansion]</button>
+          <button class="btn g-help" type="button" data-help="noExpansion" aria-label="About no expansion" aria-expanded="false">[?]</button>
+        </div>
+        </div>
+        </div>
+        <div class="g-actions">
+          <button class="btn on" type="submit">[apply]</button>
+          <button class="btn g-reroll" type="button">[reroll]</button>
+        </div>
+      </form>
+    </aside>
+
+    <div class="g-tip" id="g-tip" role="tooltip" hidden></div>
+
+    <div class="g-scale" aria-hidden="true">
+      <span class="g-scalebar"><span class="g-scalebar-line"></span><span class="g-scalebar-label">–</span></span>
+      <span class="g-a">a = 1.00</span>
+    </div>
+
+    <div class="g-time-bar">
+      <button class="btn g-restart" type="button" aria-label="Restart">[◀◀]</button>
+      <button class="btn on g-play" type="button" aria-label="Play">[▶]</button>
+      <button class="btn g-speed" type="button" aria-label="Change speed">[▶▶]</button>
+      <div class="g-scrub">
+        <input class="g-scrubber" type="range" min="0" max="1" step="any" value="0" aria-label="Time in billions of years" />
+        <span class="g-today" aria-hidden="true" hidden>today</span>
+      </div>
+      <span class="muted g-speed-label">1×</span>
+    </div>
+  </div>
+</Base>
+
+<script>
+  import { mount } from '../../sim/grabby/view/app';
+  const root = document.querySelector<HTMLElement>('.grabby');
+  if (root) mount(root);
+</script>
+
+<style is:global>
+  body.bare { overflow: hidden; }
+  .grabby {
+    position: relative;
+    height: 100dvh;
+    overflow: hidden;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  .grabby .g-stage { position: absolute; inset: 0; }
+  .grabby .g-stage canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+  .grabby a { color: var(--fg); }
+  .grabby .btn {
+    font: inherit; color: var(--muted); background: none; border: 0;
+    padding: 10px 0; margin: -10px 0; cursor: pointer;
+  }
+  .grabby .btn:hover { color: var(--fg); }
+  .grabby .btn.on, .grabby .btn[aria-pressed='true'] { color: var(--fg); font-weight: 500; }
+  .grabby .btn:disabled { opacity: 0.4; cursor: not-allowed; color: var(--muted); }
+  .grabby :focus-visible { outline: 1px solid var(--fg); outline-offset: 3px; border-radius: 2px; }
+  .grabby input[type='range'] { accent-color: var(--fg); margin: 0; width: 100%; }
+  .grabby .field {
+    font: inherit; color: var(--fg); background: transparent; border: 0;
+    border-bottom: 1px solid var(--rule); padding: 2px 0; text-align: right; border-radius: 0;
+  }
+  .grabby .field:disabled { color: var(--muted); }
+  .grabby select.field { text-align: left; max-width: 150px; }
+  .grabby select.field option { background: var(--bg); color: var(--fg); }
+  .grabby .g-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+  .grabby .sep { color: var(--rule); }
+
+  .grabby .g-top {
+    position: absolute; left: 0; right: 0; top: 0; padding: 24px 32px;
+    display: flex; justify-content: space-between; align-items: baseline;
+    gap: 16px; flex-wrap: wrap; font-size: 14px; pointer-events: none;
+  }
+  .grabby .g-top > * { pointer-events: auto; }
+  .grabby .g-home { font-weight: 500; }
+  .grabby .g-home:hover .muted { color: var(--fg); }
+  .grabby .g-bar { display: flex; gap: 18px; flex-wrap: wrap; align-items: baseline; }
+
+  .grabby .g-readout {
+    position: absolute; left: 32px; top: 76px; display: flex; flex-direction: column;
+    gap: 2px; font-size: 12px; color: var(--muted); pointer-events: none;
+  }
+  .grabby .g-time { color: var(--fg); font-size: 28px; font-variant-numeric: tabular-nums; }
+  .grabby .g-claimed, .grabby .g-alive { font-variant-numeric: tabular-nums; }
+  .grabby .g-status:empty, .grabby .g-ended:empty { display: none; }
+  .grabby .g-ended { color: var(--fg); }
+
+  .grabby .g-scale {
+    position: absolute; left: 32px; bottom: 76px; display: flex; flex-direction: column;
+    gap: 2px; font-size: 11px; color: var(--muted); pointer-events: none;
+    font-variant-numeric: tabular-nums;
+  }
+  .grabby .g-scalebar { display: flex; align-items: center; gap: 8px; }
+  .grabby .g-scalebar-line {
+    display: inline-block; width: 100px; height: 6px;
+    border: 1px solid var(--muted); border-top: 0;
+  }
+  .grabby .g-today[hidden] { display: none; }
+
+  .grabby .g-drawer {
+    position: absolute; right: 0; top: 72px; bottom: 88px; width: 300px;
+    padding: 20px 32px 20px 24px; background: var(--bg); border-left: 1px solid var(--rule);
+    overflow-y: auto;
+  }
+  .grabby .g-drawer[hidden] { display: none; }
+  .grabby .g-form { display: flex; flex-direction: column; gap: 14px; }
+  .grabby .g-field { display: flex; flex-direction: column; gap: 2px; }
+  .grabby .g-number { flex-direction: row; flex-wrap: wrap; justify-content: space-between; align-items: baseline; column-gap: 12px; }
+  .grabby .g-number .g-num { display: flex; gap: 4px; align-items: baseline; }
+  .grabby .g-number .g-num .field { width: 84px; }
+  .grabby .g-number .g-hint, .grabby .g-number .g-slider { flex-basis: 100%; }
+  .grabby .g-hint { font-size: 11px; color: var(--muted); }
+  .grabby .g-field[data-off] > label { color: var(--muted); }
+  .grabby .g-actions { display: flex; flex-wrap: wrap; gap: 16px; padding-top: 4px; }
+
+  .grabby .g-time-bar {
+    position: absolute; left: 32px; right: 32px; bottom: 28px;
+    display: flex; align-items: center; gap: 18px;
+  }
+  .grabby .g-scrub { flex: 1; position: relative; }
+  .grabby .g-today {
+    position: absolute; top: -18px; font-size: 11px; color: var(--muted);
+    transform: translateX(-50%); pointer-events: none;
+  }
+  .grabby .g-speed-label { min-width: 3ch; text-align: right; font-variant-numeric: tabular-nums; }
+  .grabby[data-busy='true'] .g-stage { opacity: 0.5; transition: opacity 0.2s; }
+
+
+  /* Phone-only parts are hidden on desktop. .g-view and .g-scroll are layout-transparent there. */
+  .grabby .g-view, .grabby .g-scroll { display: contents; }
+  .grabby .g-home-short, .grabby .g-mini, .grabby .g-handle, .grabby .g-tabs, .grabby .g-sheet-view:empty { display: none; }
+
+  .grabby .g-note {
+    position: absolute; left: 50%; top: 72px; transform: translateX(-50%);
+    display: flex; gap: 12px; align-items: baseline; padding: 6px 12px;
+    background: var(--bg); border: 1px solid var(--rule); font-size: 12px; white-space: nowrap;
+  }
+  .grabby .g-note[hidden], .grabby .g-info[hidden] { display: none; }
+
+  .grabby .g-info {
+    position: absolute; left: 32px; bottom: 130px; width: 260px;
+    padding: 10px 14px; background: var(--bg); border: 1px solid var(--rule); font-size: 12px;
+  }
+  .grabby .g-info-title { display: inline-flex; gap: 8px; align-items: center; font-weight: 500; }
+  .grabby .g-swatch { width: 10px; height: 10px; border-radius: 50%; background: var(--rule); flex: none; }
+  .grabby .g-info-list { margin: 6px 0 0; display: flex; flex-direction: column; gap: 1px; }
+  .grabby .g-info-list > div { display: flex; justify-content: space-between; gap: 12px; }
+  .grabby .g-info-list dt { color: var(--muted); }
+  .grabby .g-info-list dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+
+  /* Basic / advanced: desktop and the rail expand a section; the portrait sheet uses tabs. */
+  .grabby .g-advanced { display: flex; flex-direction: column; gap: 14px; padding-top: 4px; border-top: 1px solid var(--rule); }
+  .grabby .g-form[data-tab='basic'] .g-advanced { display: none; }
+  .grabby .g-adv-toggle { align-self: flex-start; }
+  .grabby .g-lab { justify-content: flex-start; gap: 6px; }
+  .grabby .g-field.g-row { flex-direction: row; justify-content: flex-start; gap: 8px; }
+  .grabby .g-help { font-size: 11px; }
+  .grabby .g-tip {
+    position: fixed; z-index: 20; max-width: min(280px, calc(100vw - 16px));
+    padding: 8px 10px; background: var(--bg); color: var(--fg); border: 1px solid var(--rule);
+    font-size: 12px; line-height: 1.5; pointer-events: none;
+  }
+  .grabby .g-tip[hidden], .grabby .g-wrap[hidden] { display: none; }
+
+  @media (max-width: 640px) {
+    .grabby .g-top { padding: 16px; }
+    .grabby .g-bar { gap: 12px; }
+    .grabby .g-readout { left: 16px; top: auto; bottom: 72px; }
+    .grabby .g-scale { left: auto; right: 16px; bottom: 72px; align-items: flex-end; }
+    .grabby .g-time { font-size: 22px; }
+    .grabby .g-drawer {
+      left: 0; width: auto; top: auto; bottom: 64px; max-height: 60dvh;
+      padding: 16px; border-left: 0; border-top: 1px solid var(--rule);
+    }
+    .grabby .g-time-bar { left: 16px; right: 16px; bottom: 16px; gap: 12px; }
+  }
+  /* ---------- phones ----------
+     Keep these queries in sync with PORTRAIT_MQ / LANDSCAPE_MQ in view/layout.ts. */
+  @media (pointer: coarse) and (max-width: 600px) and (orientation: portrait),
+         (pointer: coarse) and (max-height: 500px) and (orientation: landscape) {
+    body.bare { overscroll-behavior: none; }
+    .grabby {
+      position: fixed; inset: 0; height: auto;
+      --sl: env(safe-area-inset-left, 0px); --sr: env(safe-area-inset-right, 0px);
+      --st: env(safe-area-inset-top, 0px); --sb: env(safe-area-inset-bottom, 0px);
+    }
+    .grabby .btn {
+      min-height: 44px; min-width: 44px; padding: 0 2px; margin: 0;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+    .grabby .g-top {
+      padding: calc(4px + var(--st)) calc(12px + var(--sr)) 0 calc(16px + var(--sl));
+      flex-wrap: nowrap; align-items: center;
+    }
+    .grabby .g-home { min-height: 44px; display: inline-flex; align-items: center; }
+    .grabby .g-home-long, .grabby .g-bar > .sep { display: none; }
+    .grabby .g-home-short { display: inline; }
+    .grabby .g-readout { left: calc(16px + var(--sl)); right: auto; top: calc(48px + var(--st)); bottom: auto; }
+    .grabby .g-readout > span:not(.g-mini):not(.g-status):not(.g-ended):not(.g-wrap) { display: none; }
+    .grabby .g-mini { display: inline; color: var(--fg); font-size: 13px; font-variant-numeric: tabular-nums; }
+    .grabby .g-time-bar { gap: 8px; }
+    .grabby .g-restart { display: none; }
+    .grabby .g-play { order: 0; }
+    .grabby .g-scrub { order: 1; }
+    .grabby .g-speed { order: 2; }
+    .grabby .g-speed-label { order: 3; }
+    .grabby .g-scrubber { height: 44px; }
+    .grabby .g-sheet-view { display: flex; flex-wrap: wrap; column-gap: 12px; align-items: center; }
+    .grabby .g-sheet-view .sep { display: none; }
+    .grabby .g-sheet-view .g-view { display: contents; }
+    .grabby .g-actions { gap: 8px 16px; }
+    .grabby .field { min-height: 32px; }
+    .grabby .g-note { top: calc(76px + var(--st)); white-space: normal; max-width: calc(100% - 32px); align-items: center; }
+  }
+
+  /* Portrait: bottom sheet above a slim time bar. */
+  @media (pointer: coarse) and (max-width: 600px) and (orientation: portrait) {
+    .grabby { --tb: calc(52px + var(--sb)); }
+    .grabby .g-time-bar {
+      left: calc(12px + var(--sl)); right: calc(12px + var(--sr)); bottom: var(--sb); height: 52px;
+    }
+    .grabby .g-scale { left: auto; right: calc(16px + var(--sr)); top: calc(48px + var(--st)); bottom: auto; align-items: flex-end; }
+    .grabby .g-drawer, .grabby .g-drawer[hidden] {
+      display: flex; flex-direction: column;
+      left: 0; right: 0; top: auto; bottom: var(--tb); width: auto;
+      height: var(--sheet-h, 44px); max-height: none; padding: 0 calc(16px + var(--sr)) 0 calc(16px + var(--sl));
+      border-left: 0; border-top: 1px solid var(--rule); overflow: hidden;
+      transition: height 0.2s ease;
+    }
+    .grabby .g-drawer[data-dragging] { transition: none; }
+    .grabby .g-handle {
+      display: flex; flex: none; height: 44px; width: 100%; align-items: center; justify-content: center;
+      background: none; border: 0; padding: 0; cursor: grab; touch-action: none;
+    }
+    .grabby .g-grip { width: 40px; height: 4px; border-radius: 2px; background: var(--muted); }
+    .grabby .g-form { flex: 1; min-height: 0; gap: 0; }
+    .grabby .g-drawer[data-snap='collapsed'] .g-form { visibility: hidden; }
+    .grabby .g-tabs { display: flex; gap: 16px; flex: none; border-bottom: 1px solid var(--rule); }
+    .grabby .g-tab[aria-selected='true'] { color: var(--fg); font-weight: 500; }
+    .grabby .g-scroll {
+      display: flex; flex-direction: column; gap: 14px; flex: 1; min-height: 0;
+      overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; padding: 12px 0;
+    }
+    .grabby .g-params-label { display: none; }
+    .grabby .g-adv-toggle { display: none; }
+    .grabby .g-advanced { display: contents; }
+    .grabby .g-form[data-tab='basic'] .g-field:not([data-group='basic']),
+    .grabby .g-form[data-tab='advanced'] .g-field:not([data-group='advanced']) { display: none; }
+    .grabby .g-actions { flex: none; padding: 4px 0 calc(4px); border-top: 1px solid var(--rule); background: var(--bg); }
+    .grabby .g-info {
+      left: calc(16px + var(--sl)); right: calc(16px + var(--sr)); top: calc(76px + var(--st)); bottom: auto;
+      width: auto; max-width: 340px;
+    }
+  }
+
+  /* Landscape: right side rail like the desktop drawer, time bar along the canvas bottom. */
+  @media (pointer: coarse) and (max-height: 500px) and (orientation: landscape) {
+    .grabby { --rail: 300px; }
+    .grabby:has(.g-drawer:not([hidden])) .g-stage { right: calc(var(--rail) + var(--sr)); }
+    .grabby:has(.g-drawer:not([hidden])) .g-top,
+    .grabby:has(.g-drawer:not([hidden])) .g-time-bar { right: calc(var(--rail) + var(--sr) + 12px); }
+    .grabby .g-drawer {
+      left: auto; right: 0; top: 0; bottom: 0; width: var(--rail); max-height: none;
+      padding: calc(8px + var(--st)) calc(16px + var(--sr)) calc(8px + var(--sb)) 16px;
+      border-top: 0; border-left: 1px solid var(--rule); overscroll-behavior: contain;
+    }
+    .grabby .g-time-bar { left: calc(16px + var(--sl)); right: calc(16px + var(--sr)); bottom: var(--sb); height: 48px; }
+    .grabby .g-scale { left: calc(16px + var(--sl)); bottom: calc(52px + var(--sb)); right: auto; align-items: flex-start; }
+    .grabby .g-info { left: auto; right: 12px; top: calc(48px + var(--st)); bottom: auto; width: 240px; }
+    .grabby:has(.g-drawer:not([hidden])) .g-info { right: calc(var(--rail) + var(--sr) + 12px); }
+  }
+</style>
